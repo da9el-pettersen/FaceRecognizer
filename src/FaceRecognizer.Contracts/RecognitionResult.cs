@@ -13,7 +13,10 @@ public enum RecognitionOutcome
     LivenessFailed,
 
     /// <summary>Ingen ansikt ble funnet i bildet.</summary>
-    NoFace
+    NoFace,
+
+    /// <summary>Teknisk feil under behandling. Døren skal forbli låst.</summary>
+    Error
 }
 
 /// <summary>

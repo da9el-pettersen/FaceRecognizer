@@ -1,0 +1,31 @@
+# Eksempel på HA-automasjoner (modul B). Tilpass entitetsnavn.
+- alias: "FaceRecognizer: trigger ved person"
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.kamera_person   # TILPASS
+      to: "on"
+  action:
+    - service: mqtt.publish
+      data:
+        topic: facerecognizer/trigger
+        payload: "go"
+
+- alias: "FaceRecognizer: handling på resultat"
+  trigger:
+    - platform: mqtt
+      topic: facerecognizer/result
+  action:
+    - choose:
+        - conditions: "{{ trigger.payload_json.outcome == 'verified' }}"
+          sequence:
+            - service: lock.unlock
+              target:
+                entity_id: lock.inngangsdor   # TILPASS
+      default:
+        - service: lock.lock
+          target:
+            entity_id: lock.inngangsdor       # TILPASS
+        - service: notify.notify
+          data:
+            title: "Ukjent person ved døren"
+            message: "Utfall: {{ trigger.payload_json.outcome }}"
