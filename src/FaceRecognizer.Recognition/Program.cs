@@ -51,13 +51,13 @@ builder.Services.AddHttpClient<ReolinkCamera>((sp, client) =>
         };
     });
 
-builder.Services.AddSingleton(_ => FaceAiSharpBundleFactory.CreateFaceDetectorWithLandmarks());
+// Egne detektor-instanser: matcher og liveness kjører samtidig og deler ikke ONNX-tilstand.
 builder.Services.AddSingleton(sp => new FaceMatcher(
-    sp.GetRequiredService<IFaceDetectorWithLandmarks>(),
+    FaceAiSharpBundleFactory.CreateFaceDetectorWithLandmarks(),
     FaceAiSharpBundleFactory.CreateFaceEmbeddingsGenerator(),
     sp.GetRequiredService<IOptions<FaceMatchOptions>>().Value));
 builder.Services.AddSingleton<ILivenessChecker>(sp => new MiniFasNetLivenessChecker(
-    sp.GetRequiredService<IFaceDetectorWithLandmarks>(),
+    FaceAiSharpBundleFactory.CreateFaceDetectorWithLandmarks(),
     sp.GetRequiredService<IOptions<LivenessOptions>>()));
 builder.Services.AddSingleton<MqttGateway>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<MqttGateway>());

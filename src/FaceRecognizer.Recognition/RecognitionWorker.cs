@@ -85,7 +85,13 @@ public sealed class RecognitionWorker : BackgroundService
     private async Task<RecognitionResult> EvaluateAsync(CancellationToken cancellationToken)
     {
         var snapshot = await _camera.GetSnapshotAsync(cancellationToken);
-        var match = _matcher.Match(snapshot);
+
+        // Gjenkjenning og liveness er uavhengige CPU-oppgaver på samme bilde og kjører parallelt.
+        var matchTask = Task.Run(() => _matcher.Match(snapshot), cancellationToken);
+        var livenessTask = Task.Run(() => _liveness.Check(snapshot), cancellationToken);
+        await Task.WhenAll(matchTask, livenessTask);
+        var match = matchTask.Result;
+        var colorLiveness = livenessTask.Result;
 
         if (!match.FaceFound)
         {
@@ -97,7 +103,6 @@ public sealed class RecognitionWorker : BackgroundService
             return new RecognitionResult(RecognitionOutcome.Unknown, null, match.Score, DateTimeOffset.UtcNow);
         }
 
-        var colorLiveness = _liveness.Check(snapshot);
         if (!colorLiveness.IsLive)
         {
             return new RecognitionResult(
