@@ -1,0 +1,40 @@
+name: Face Recognizer
+version: "0.1.0"
+slug: face_recognizer
+description: Ansiktsgjenkjenning og liveness fra Reolink-kamera, resultat via MQTT
+arch:
+  - amd64
+  - aarch64
+startup: application
+boot: auto
+init: false
+# Supervisor gir MQTT-tilkobling automatisk (Mosquitto-appen), ingen passord i imaget
+services:
+  - mqtt:need
+# /config i appen = addon_config (vedvarende). Referansebilder ligger i /config/faces/<navn>/
+map:
+  - addon_config:rw
+options:
+  camera:
+    base_url: "https://kamera.local"
+    username: ""
+    password: ""
+    certificate_sha256: ""
+    channel: 0
+  face:
+    threshold: 0.98
+schema:
+  camera:
+    base_url: url
+    username: str
+    password: password
+    certificate_sha256: str
+    channel: int(0,)
+  face:
+    threshold: float(0.5,1)
+  # Valgfri overstyring. Utelatt = bruk MQTT fra Supervisor.
+  mqtt:
+    host: str?
+    port: port?
+    username: str?
+    password: password?

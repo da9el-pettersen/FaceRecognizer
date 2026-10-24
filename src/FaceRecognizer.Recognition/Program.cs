@@ -5,6 +5,24 @@ using Microsoft.Extensions.Options;
 
 var builder = Host.CreateApplicationBuilder(args);
 
+if (File.Exists(HomeAssistantAddon.OptionsPath))
+{
+    // Kjører som HA-app: innstillinger fra /data/options.json, MQTT fra Supervisor.
+    var settings = HomeAssistantAddon.FlattenOptions(File.ReadAllText(HomeAssistantAddon.OptionsPath));
+    settings.TryAdd("Face:ReferenceFolder", HomeAssistantAddon.FacesFolder);
+    var supervisorToken = Environment.GetEnvironmentVariable("SUPERVISOR_TOKEN");
+    if (!settings.ContainsKey("Mqtt:Host") && !string.IsNullOrEmpty(supervisorToken))
+    {
+        using var http = new HttpClient();
+        foreach (var (key, value) in await HomeAssistantAddon.GetMqttServiceAsync(http, supervisorToken, default))
+        {
+            settings[key] = value;
+        }
+    }
+
+    builder.Configuration.AddInMemoryCollection(settings);
+}
+
 builder.Services.Configure<MqttOptions>(builder.Configuration.GetSection("Mqtt"));
 builder.Services.Configure<CameraOptions>(builder.Configuration.GetSection("Camera"));
 builder.Services.Configure<PipelineOptions>(builder.Configuration.GetSection("Pipeline"));
