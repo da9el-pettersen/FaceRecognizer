@@ -22,4 +22,3 @@ Appen laster dem ved oppstart.
 ## Installasjon (lokal app)
 Kopier hele prosjektmappen (uten `.git`) til `/addons/face_recognizer` på HAOS, f.eks. via Samba-appen.
 Velg deretter Innstillinger → Apper → Appbutikk → ⋮ → Se etter oppdateringer, og installer «Face Recognizer».
-Plasser eventuelt `sixlabors.lic` i rotmappen for Release-bygget (ImageSharp 4.x).
