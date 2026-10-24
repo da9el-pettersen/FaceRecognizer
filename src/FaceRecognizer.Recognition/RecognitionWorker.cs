@@ -86,34 +86,47 @@ public sealed class RecognitionWorker : BackgroundService
     {
         var snapshot = await _camera.GetSnapshotAsync(cancellationToken);
 
-        // Gjenkjenning og liveness er uavhengige CPU-oppgaver på samme bilde og kjører parallelt.
-        var matchTask = Task.Run(() => _matcher.Match(snapshot), cancellationToken);
-        var livenessTask = Task.Run(() => _liveness.Check(snapshot), cancellationToken);
-        await Task.WhenAll(matchTask, livenessTask);
-        var match = matchTask.Result;
-        var colorLiveness = livenessTask.Result;
+        if (ImageAnalysis.IsGrayscale(snapshot))
+        {
+            // Kameraet er allerede i IR: bildet duger til både match og liveness, så de kjører samtidig.
+            var matchTask = Task.Run(() => _matcher.Match(snapshot), cancellationToken);
+            var livenessTask = Task.Run(() => _liveness.Check(snapshot), cancellationToken);
+            await Task.WhenAll(matchTask, livenessTask);
+            return ToResult(matchTask.Result, livenessTask.Result);
+        }
 
+        // Fargebilde: først match. Bare ved treff sjekkes liveness, med bytte til IR.
+        var match = await Task.Run(() => _matcher.Match(snapshot), cancellationToken);
+        if (!match.FaceFound || !match.IsMatch)
+        {
+            return ToResult(match, null);
+        }
+
+        // Liveness på fargebildet kjører mens kameraet bytter til IR og tar nytt bilde.
+        var colorLivenessTask = Task.Run(() => _liveness.Check(snapshot), cancellationToken);
+        var infraredLivenessTask = CheckInfraredLivenessAsync(cancellationToken);
+        await Task.WhenAll(colorLivenessTask, infraredLivenessTask);
+        var color = colorLivenessTask.Result;
+        var infrared = infraredLivenessTask.Result;
+        var combined = new LivenessResult(color.IsLive && infrared.IsLive, Math.Min(color.Score, infrared.Score));
+        return ToResult(match, combined);
+    }
+
+    private static RecognitionResult ToResult(FaceMatchResult match, LivenessResult? liveness)
+    {
+        var now = DateTimeOffset.UtcNow;
         if (!match.FaceFound)
         {
-            return new RecognitionResult(RecognitionOutcome.NoFace, null, 0f, DateTimeOffset.UtcNow);
+            return new RecognitionResult(RecognitionOutcome.NoFace, null, 0f, now);
         }
 
         if (!match.IsMatch)
         {
-            return new RecognitionResult(RecognitionOutcome.Unknown, null, match.Score, DateTimeOffset.UtcNow);
+            return new RecognitionResult(RecognitionOutcome.Unknown, null, match.Score, now);
         }
 
-        if (!colorLiveness.IsLive)
-        {
-            return new RecognitionResult(
-                RecognitionOutcome.LivenessFailed, match.PersonName, match.Score, DateTimeOffset.UtcNow, colorLiveness.Score);
-        }
-
-        var infraredLiveness = await CheckInfraredLivenessAsync(cancellationToken);
-        var live = infraredLiveness.IsLive;
-        var outcome = live ? RecognitionOutcome.Verified : RecognitionOutcome.LivenessFailed;
-        var livenessScore = Math.Min(colorLiveness.Score, infraredLiveness.Score);
-        return new RecognitionResult(outcome, match.PersonName, match.Score, DateTimeOffset.UtcNow, livenessScore);
+        var outcome = liveness is { IsLive: true } ? RecognitionOutcome.Verified : RecognitionOutcome.LivenessFailed;
+        return new RecognitionResult(outcome, match.PersonName, match.Score, now, liveness?.Score ?? 0f);
     }
 
     private async Task<LivenessResult> CheckInfraredLivenessAsync(CancellationToken cancellationToken)
