@@ -16,7 +16,14 @@
       topic: facerecognizer/result
   action:
     - choose:
-        - conditions: "{{ trigger.payload_json.outcome == 'verified' }}"
+        # Ansiktsgjenkjenning alene skal aldri låse opp. Krev i tillegg en uavhengig faktor, f.eks.
+        # at telefonen til personen er hjemme (person.*), eller at en kode/bryter er aktivert (input_boolean).
+        - conditions:
+            - "{{ trigger.payload_json.outcome == 'verified' }}"
+            - "{{ trigger.payload_json.faceCount == 1 }}"
+            - condition: state
+              entity_id: person.eier                      # TILPASS: uavhengig faktor
+              state: home
           sequence:
             - service: lock.unlock
               target:

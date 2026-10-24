@@ -1,0 +1,14 @@
+name: DeepFace
+version: "0.1.0"
+slug: deepface
+description: DeepFace REST API (serengil/deepface) brukt av Face Recognizer. Kun internt, ingen porter åpnes.
+arch:
+  - amd64
+startup: services
+boot: auto
+init: false
+# Ingen "ports": API-et er kun nåbart fra andre apper på HA sitt interne nett (host local-deepface:5000).
+options:
+  auth_token: ""
+schema:
+  auth_token: password

@@ -34,6 +34,9 @@ public sealed class MqttOptions
 /// <summary>Innstillinger for Reolink-kameraet.</summary>
 public sealed class CameraOptions
 {
+    /// <summary>Navn på kameraet, tas med i publiserte resultater.</summary>
+    public string Name { get; set; } = "reolink";
+
     /// <summary>Adresse til kameraet, f.eks. https://kamera.local.</summary>
     public string BaseUrl { get; set; } = "";
 

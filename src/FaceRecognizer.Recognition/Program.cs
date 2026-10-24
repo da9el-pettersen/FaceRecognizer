@@ -1,6 +1,7 @@
 using System.Threading.Channels;
 using FaceAiSharp;
 using FaceRecognizer.Recognition;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 
 var builder = Host.CreateApplicationBuilder(args);
@@ -51,11 +52,43 @@ builder.Services.AddHttpClient<ReolinkCamera>((sp, client) =>
         };
     });
 
-// Egne detektor-instanser: matcher og liveness kjører samtidig og deler ikke ONNX-tilstand.
-builder.Services.AddSingleton(sp => new FaceMatcher(
-    FaceAiSharpBundleFactory.CreateFaceDetectorWithLandmarks(),
-    FaceAiSharpBundleFactory.CreateFaceEmbeddingsGenerator(),
-    sp.GetRequiredService<IOptions<FaceMatchOptions>>().Value));
+// Motor velges via FACE_RECOGNITION_PROVIDER (eller Face:Provider). FaceAiSharp er standard.
+var providerName = Environment.GetEnvironmentVariable("FACE_RECOGNITION_PROVIDER")
+    ?? builder.Configuration["Face:Provider"]
+    ?? "FaceAiSharp";
+builder.Services.Configure<DeepFaceOptions>(builder.Configuration.GetSection("DeepFace"));
+builder.Services.AddHealthChecks().AddCheck<MqttHealthCheck>("mqtt");
+builder.Services.AddSingleton<IHealthCheckPublisher, LogHealthCheckPublisher>();
+builder.Services.Configure<HealthCheckPublisherOptions>(o =>
+{
+    o.Delay = TimeSpan.FromSeconds(10);
+    o.Period = TimeSpan.FromSeconds(60);
+});
+
+if (providerName.Equals("DeepFace", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddHttpClient<DeepFaceRecognitionProvider>((sp, client) =>
+    {
+        var deepFace = sp.GetRequiredService<IOptions<DeepFaceOptions>>().Value;
+        client.BaseAddress = new Uri(deepFace.BaseUrl);
+        client.Timeout = deepFace.Timeout;
+        if (!string.IsNullOrEmpty(deepFace.AuthToken))
+        {
+            client.DefaultRequestHeaders.Authorization = new("Bearer", deepFace.AuthToken);
+        }
+    });
+    builder.Services.AddSingleton<IFaceRecognitionProvider>(
+        sp => sp.GetRequiredService<DeepFaceRecognitionProvider>());
+    builder.Services.AddHealthChecks().AddCheck<DeepFaceHealthCheck>("deepface");
+}
+else
+{
+    // Egne detektor-instanser: matcher og liveness kjører samtidig og deler ikke ONNX-tilstand.
+    builder.Services.AddSingleton<IFaceRecognitionProvider>(sp => new FaceAiSharpRecognitionProvider(
+        FaceAiSharpBundleFactory.CreateFaceDetectorWithLandmarks(),
+        FaceAiSharpBundleFactory.CreateFaceEmbeddingsGenerator(),
+        sp.GetRequiredService<IOptions<FaceMatchOptions>>().Value));
+}
 builder.Services.AddSingleton<ILivenessChecker>(sp => new MiniFasNetLivenessChecker(
     FaceAiSharpBundleFactory.CreateFaceDetectorWithLandmarks(),
     sp.GetRequiredService<IOptions<LivenessOptions>>()));
@@ -63,4 +96,13 @@ builder.Services.AddSingleton<MqttGateway>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<MqttGateway>());
 builder.Services.AddHostedService<RecognitionWorker>();
 
+// IHttpClientFactory logger hver forespørsel på Information; vi vil kun se advarsler.
+builder.Logging.AddFilter("System.Net.Http.HttpClient", LogLevel.Warning);
+
+if (args.Contains("selftest"))
+{
+    return await SelfTest.RunAsync(builder.Build().Services, args);
+}
+
 builder.Build().Run();
+return 0;

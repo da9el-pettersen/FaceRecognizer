@@ -16,24 +16,38 @@ map:
   - addon_config:rw
 options:
   camera:
+    name: "inngang"
     base_url: "https://kamera.local"
     username: ""
     password: ""
     certificate_sha256: ""
     channel: 0
   face:
+    provider: "DeepFace"
     threshold: 0.98
+  deepface:
+    base_url: "http://local-deepface:5000"
+    auth_token: ""
+    model_name: "SFace"
+    threshold: 0.5
   liveness:
     min_score: 0.8
 schema:
   camera:
+    name: str
     base_url: url
     username: str
     password: password
     certificate_sha256: str
     channel: int(0,)
   face:
+    provider: list(FaceAiSharp|DeepFace)
     threshold: float(0.5,1)
+  deepface:
+    base_url: url
+    auth_token: password
+    model_name: str
+    threshold: float(0.1,1)
   liveness:
     min_score: float(0.5,1)
   # Valgfri overstyring. Utelatt = bruk MQTT fra Supervisor.

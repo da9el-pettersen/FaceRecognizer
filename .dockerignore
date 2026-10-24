@@ -3,3 +3,7 @@
 tests
 .git
 ha
+deepface
+deploy
+testdata
+.env

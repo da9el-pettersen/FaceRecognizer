@@ -483,3 +483,7 @@ $RECYCLE.BIN/
 
 .env
 faces/
+
+# Testbilder (ikke egne, hentes manuelt)
+testdata/
+selftest-out/

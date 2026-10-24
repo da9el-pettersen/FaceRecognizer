@@ -31,6 +31,9 @@ public sealed class MqttGateway : BackgroundService
         _logger = logger;
     }
 
+    /// <summary>Om MQTT-forbindelsen er oppe akkurat nå.</summary>
+    public bool IsConnected => _client.IsConnected;
+
     /// <summary>Publiserer et resultat (retained) slik at Home Assistant alltid ser siste utfall.</summary>
     /// <param name="result">Resultatet som skal sendes.</param>
     /// <param name="cancellationToken">Avbruddstoken.</param>
@@ -164,6 +167,21 @@ public sealed class MqttGateway : BackgroundService
             device
         };
 
+        var person = new
+        {
+            name = "Person",
+            unique_id = "facerecognizer_person",
+            state_topic = _options.ResultTopic,
+            value_template = "{{ value_json.personName | default('Unknown', true) }}",
+            json_attributes_topic = _options.ResultTopic,
+            availability_topic = _options.StatusTopic,
+            icon = "mdi:account-check",
+            device
+        };
+
+        await PublishAsync(
+            $"{_options.DiscoveryPrefix}/sensor/facerecognizer/person/config",
+            JsonSerializer.Serialize(person), retain: true, cancellationToken);
         await PublishAsync(
             $"{_options.DiscoveryPrefix}/sensor/facerecognizer/outcome/config",
             JsonSerializer.Serialize(outcome), retain: true, cancellationToken);

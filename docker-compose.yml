@@ -1,0 +1,62 @@
+# Lokal kjøring/test utenfor HAOS. På HAOS brukes add-on-konfigurasjonen (config.yaml), se README.md.
+# Kopier .env.example til .env og fyll inn. .env skal aldri i Git.
+services:
+  recognition:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      deepface:
+        condition: service_healthy
+    environment:
+      FACE_RECOGNITION_PROVIDER: ${FACE_RECOGNITION_PROVIDER:-DeepFace}
+      Face__ReferenceFolder: /data/faces
+      Face__Threshold: ${FACEAISHARP_THRESHOLD:-0.98}
+      DeepFace__BaseUrl: http://deepface:5000
+      DeepFace__AuthToken: ${DEEPFACE_AUTH_TOKEN:?Sett DEEPFACE_AUTH_TOKEN i .env}
+      DeepFace__ModelName: ${DEEPFACE_MODEL:-SFace}
+      DeepFace__Threshold: ${DEEPFACE_THRESHOLD:-0.5}
+      Mqtt__Host: ${MQTT_HOST:-mosquitto}
+      Mqtt__Port: ${MQTT_PORT:-1883}
+      Mqtt__Username: ${MQTT_USERNAME:-}
+      Mqtt__Password: ${MQTT_PASSWORD:-}
+      Camera__Name: ${CAMERA_NAME:-reolink}
+      Camera__BaseUrl: ${CAMERA_BASE_URL:-https://kamera.local}
+      Camera__Username: ${CAMERA_USERNAME:-}
+      Camera__Password: ${CAMERA_PASSWORD:-}
+      Camera__CertificateSha256: ${CAMERA_CERT_SHA256:-}
+    volumes:
+      - faces:/data/faces
+      - ./selftest-out:/data/selftest
+    networks: [internal, lan]
+
+  deepface:
+    build: ./deepface
+    restart: unless-stopped
+    environment:
+      DEEPFACE_AUTH_TOKEN: ${DEEPFACE_AUTH_TOKEN:?Sett DEEPFACE_AUTH_TOKEN i .env}
+    # Ingen "ports": kun nåbar fra tjenester på det interne nettet.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks: [internal]
+
+  # Kun for lokal test. På HAOS brukes Mosquitto-appen.
+  mosquitto:
+    image: eclipse-mosquitto:2.0.21
+    profiles: [dev]
+    restart: unless-stopped
+    volumes:
+      - ./deploy/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    networks: [internal]
+
+volumes:
+  faces:
+
+networks:
+  # internal: true gir ingen vei ut til internett. DeepFace og Mosquitto ligger kun her.
+  internal:
+    internal: true
+  lan: {}
