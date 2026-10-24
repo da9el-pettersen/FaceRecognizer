@@ -29,7 +29,8 @@ builder.Services.Configure<PipelineOptions>(builder.Configuration.GetSection("Pi
 builder.Services.Configure<FaceMatchOptions>(builder.Configuration.GetSection("Face"));
 builder.Services.Configure<LivenessOptions>(builder.Configuration.GetSection("Liveness"));
 
-// Kapasitet 1: triggere mens en behandling pågår slås sammen til én.
+// Porten forkaster triggere mens vi er opptatt; kanalen bærer kun den ene aksepterte triggeren.
+builder.Services.AddSingleton<TriggerGate>();
 builder.Services.AddSingleton(Channel.CreateBounded<DateTimeOffset>(
     new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropWrite }));
 

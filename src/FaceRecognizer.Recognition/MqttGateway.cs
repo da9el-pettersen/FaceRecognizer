@@ -14,6 +14,7 @@ public sealed class MqttGateway : BackgroundService
 {
     private readonly MqttOptions _options;
     private readonly Channel<DateTimeOffset> _triggers;
+    private readonly TriggerGate _gate;
     private readonly ILogger<MqttGateway> _logger;
     private readonly IMqttClient _client = new MqttClientFactory().CreateMqttClient();
 
@@ -21,10 +22,12 @@ public sealed class MqttGateway : BackgroundService
     public MqttGateway(
         IOptions<MqttOptions> options,
         Channel<DateTimeOffset> triggers,
+        TriggerGate gate,
         ILogger<MqttGateway> logger)
     {
         _options = options.Value;
         _triggers = triggers;
+        _gate = gate;
         _logger = logger;
     }
 
@@ -42,9 +45,18 @@ public sealed class MqttGateway : BackgroundService
     {
         _client.ApplicationMessageReceivedAsync += e =>
         {
-            if (e.ApplicationMessage.Topic == _options.TriggerTopic)
+            if (e.ApplicationMessage.Topic != _options.TriggerTopic)
             {
-                _triggers.Writer.TryWrite(DateTimeOffset.UtcNow);
+                return Task.CompletedTask;
+            }
+
+            if (!_gate.TryEnter())
+            {
+                _logger.LogDebug("Opptatt, trigger forkastet.");
+            }
+            else if (!_triggers.Writer.TryWrite(DateTimeOffset.UtcNow))
+            {
+                _gate.Exit(TimeSpan.Zero);
             }
 
             return Task.CompletedTask;

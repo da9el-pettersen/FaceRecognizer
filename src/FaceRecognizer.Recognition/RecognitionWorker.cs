@@ -11,6 +11,7 @@ namespace FaceRecognizer.Recognition;
 public sealed class RecognitionWorker : BackgroundService
 {
     private readonly Channel<DateTimeOffset> _triggers;
+    private readonly TriggerGate _gate;
     private readonly ReolinkCamera _camera;
     private readonly FaceMatcher _matcher;
     private readonly ILivenessChecker _liveness;
@@ -22,6 +23,7 @@ public sealed class RecognitionWorker : BackgroundService
     /// <summary>Oppretter workeren.</summary>
     public RecognitionWorker(
         Channel<DateTimeOffset> triggers,
+        TriggerGate gate,
         ReolinkCamera camera,
         FaceMatcher matcher,
         ILivenessChecker liveness,
@@ -32,6 +34,7 @@ public sealed class RecognitionWorker : BackgroundService
     {
         _cameraOptions = cameraOptions.Value;
         _triggers = triggers;
+        _gate = gate;
         _camera = camera;
         _matcher = matcher;
         _liveness = liveness;
@@ -72,10 +75,9 @@ public sealed class RecognitionWorker : BackgroundService
             {
                 _logger.LogError(ex, "Kunne ikke publisere resultat.");
             }
-
-            await Task.Delay(_options.Cooldown, stoppingToken);
-            while (_triggers.Reader.TryRead(out _))
+            finally
             {
+                _gate.Exit(_options.Cooldown);
             }
         }
     }
