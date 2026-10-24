@@ -1,24 +1,24 @@
 namespace FaceRecognizer.Recognition;
 
-/// <summary>Vurderer om et IR-bilde viser et levende ansikt.</summary>
+/// <summary>Resultatet av en liveness-vurdering.</summary>
+/// <param name="IsLive">Om liveness er positivt bekreftet.</param>
+/// <param name="Score">Gjennomsnittlig "ekte"-sannsynlighet (0-1) over modellene.</param>
+public sealed record LivenessResult(bool IsLive, float Score);
+
+/// <summary>Vurderer om et bilde viser et levende ansikt.</summary>
 public interface ILivenessChecker
 {
-    /// <summary>Returnerer <c>true</c> bare når liveness er positivt bekreftet.</summary>
-    /// <param name="infraredImage">JPEG tatt i IR-modus.</param>
-    /// <param name="cancellationToken">Avbruddstoken.</param>
-    Task<bool> IsLiveAsync(byte[] infraredImage, CancellationToken cancellationToken);
+    /// <summary>Vurderer liveness. Mangler ansikt eller er scoren lav, er resultatet ikke levende.</summary>
+    /// <param name="image">JPEG-bilde (farge eller IR).</param>
+    LivenessResult Check(byte[] image);
 }
 
-/// <summary>
-/// Midlertidig implementasjon uten modell. Avviser alltid, slik at døren aldri låses opp
-/// før en reell liveness-modell er på plass.
-/// </summary>
-public sealed class UnconfiguredLivenessChecker(ILogger<UnconfiguredLivenessChecker> logger) : ILivenessChecker
+/// <summary>Innstillinger for liveness.</summary>
+public sealed class LivenessOptions
 {
-    /// <inheritdoc />
-    public Task<bool> IsLiveAsync(byte[] infraredImage, CancellationToken cancellationToken)
-    {
-        logger.LogWarning("Ingen liveness-modell er konfigurert. Avviser.");
-        return Task.FromResult(false);
-    }
+    /// <summary>Mappe med MiniFASNet ONNX-modellene.</summary>
+    public string ModelFolder { get; set; } = "/models";
+
+    /// <summary>Minste gjennomsnittlige "ekte"-score (0-1). Startverdi, må kalibreres mot egne opptak.</summary>
+    public float MinScore { get; set; } = 0.8f;
 }

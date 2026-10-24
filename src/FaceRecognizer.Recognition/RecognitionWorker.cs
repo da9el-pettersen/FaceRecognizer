@@ -95,19 +95,28 @@ public sealed class RecognitionWorker : BackgroundService
             return new RecognitionResult(RecognitionOutcome.Unknown, null, match.Score, DateTimeOffset.UtcNow);
         }
 
-        var live = await CheckLivenessAsync(cancellationToken);
+        var colorLiveness = _liveness.Check(snapshot);
+        if (!colorLiveness.IsLive)
+        {
+            return new RecognitionResult(
+                RecognitionOutcome.LivenessFailed, match.PersonName, match.Score, DateTimeOffset.UtcNow, colorLiveness.Score);
+        }
+
+        var infraredLiveness = await CheckInfraredLivenessAsync(cancellationToken);
+        var live = infraredLiveness.IsLive;
         var outcome = live ? RecognitionOutcome.Verified : RecognitionOutcome.LivenessFailed;
-        return new RecognitionResult(outcome, match.PersonName, match.Score, DateTimeOffset.UtcNow);
+        var livenessScore = Math.Min(colorLiveness.Score, infraredLiveness.Score);
+        return new RecognitionResult(outcome, match.PersonName, match.Score, DateTimeOffset.UtcNow, livenessScore);
     }
 
-    private async Task<bool> CheckLivenessAsync(CancellationToken cancellationToken)
+    private async Task<LivenessResult> CheckInfraredLivenessAsync(CancellationToken cancellationToken)
     {
         await _camera.SetInfraredAsync(true, cancellationToken);
         try
         {
             await Task.Delay(_cameraOptions.IrSettleDelay, cancellationToken);
             var infrared = await _camera.GetSnapshotAsync(cancellationToken);
-            return await _liveness.IsLiveAsync(infrared, cancellationToken);
+            return _liveness.Check(infrared);
         }
         finally
         {

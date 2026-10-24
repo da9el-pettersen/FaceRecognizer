@@ -27,6 +27,7 @@ builder.Services.Configure<MqttOptions>(builder.Configuration.GetSection("Mqtt")
 builder.Services.Configure<CameraOptions>(builder.Configuration.GetSection("Camera"));
 builder.Services.Configure<PipelineOptions>(builder.Configuration.GetSection("Pipeline"));
 builder.Services.Configure<FaceMatchOptions>(builder.Configuration.GetSection("Face"));
+builder.Services.Configure<LivenessOptions>(builder.Configuration.GetSection("Liveness"));
 
 // Kapasitet 1: triggere mens en behandling pågår slås sammen til én.
 builder.Services.AddSingleton(Channel.CreateBounded<DateTimeOffset>(
@@ -49,11 +50,14 @@ builder.Services.AddHttpClient<ReolinkCamera>((sp, client) =>
         };
     });
 
+builder.Services.AddSingleton(_ => FaceAiSharpBundleFactory.CreateFaceDetectorWithLandmarks());
 builder.Services.AddSingleton(sp => new FaceMatcher(
-    FaceAiSharpBundleFactory.CreateFaceDetectorWithLandmarks(),
+    sp.GetRequiredService<IFaceDetectorWithLandmarks>(),
     FaceAiSharpBundleFactory.CreateFaceEmbeddingsGenerator(),
     sp.GetRequiredService<IOptions<FaceMatchOptions>>().Value));
-builder.Services.AddSingleton<ILivenessChecker, UnconfiguredLivenessChecker>();
+builder.Services.AddSingleton<ILivenessChecker>(sp => new MiniFasNetLivenessChecker(
+    sp.GetRequiredService<IFaceDetectorWithLandmarks>(),
+    sp.GetRequiredService<IOptions<LivenessOptions>>()));
 builder.Services.AddSingleton<MqttGateway>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<MqttGateway>());
 builder.Services.AddHostedService<RecognitionWorker>();

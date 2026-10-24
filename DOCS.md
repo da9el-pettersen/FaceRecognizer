@@ -8,6 +8,7 @@ Selve låsehandlingen gjøres av en HA-automasjon (se `ha/automations.example.ya
   Du kan også bruke `!secret` fra `secrets.yaml` i YAML-modus.
 - **camera.certificate_sha256**: SHA-256 av kameraets sertifikat. Uten denne avvises alle kall mot kameraet.
 - **face.threshold**: minste likhet (standard 0,98).
+- **liveness.min_score**: minste gjennomsnittlige «ekte»-score fra liveness-modellene (standard 0,8). Må kalibreres.
 - **mqtt.***: valgfritt. Utelatt = MQTT-tilkobling hentes automatisk fra Mosquitto-appen.
 
 ## Referansebilder

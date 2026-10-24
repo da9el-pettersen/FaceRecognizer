@@ -23,6 +23,8 @@ options:
     channel: 0
   face:
     threshold: 0.98
+  liveness:
+    min_score: 0.8
 schema:
   camera:
     base_url: url
@@ -32,6 +34,8 @@ schema:
     channel: int(0,)
   face:
     threshold: float(0.5,1)
+  liveness:
+    min_score: float(0.5,1)
   # Valgfri overstyring. Utelatt = bruk MQTT fra Supervisor.
   mqtt:
     host: str?

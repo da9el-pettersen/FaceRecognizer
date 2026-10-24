@@ -27,11 +27,13 @@ public enum RecognitionOutcome
 /// <param name="PersonName">Navn på matchet person, ellers <c>null</c>.</param>
 /// <param name="Score">Likhetsscore (0-1) for beste match.</param>
 /// <param name="Timestamp">Tidspunkt for avgjørelsen (UTC).</param>
+/// <param name="LivenessScore">Laveste liveness-score (0-1) som ble målt, 0 hvis liveness ikke ble sjekket.</param>
 public sealed record RecognitionResult(
     RecognitionOutcome Outcome,
     string? PersonName,
     float Score,
-    DateTimeOffset Timestamp)
+    DateTimeOffset Timestamp,
+    float LivenessScore = 0f)
 {
     /// <summary>MQTT-topic resultatet publiseres på.</summary>
     public const string Topic = "facerecognizer/result";
