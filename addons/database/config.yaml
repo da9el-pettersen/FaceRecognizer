@@ -13,7 +13,7 @@ init: false
 # Supervisor gir MQTT-tilkobling automatisk (Mosquitto-appen). Brukes til å varsle Recognition om endringer.
 services:
   - mqtt:need
-# Ingen "ports": nåbar fra andre apper som local-face-database:8080. Databasen ligger i appens /data (vedvarende, i backup).
+# Ingen "ports": nåbar fra andre apper som def5d25e-face-database:8080. Databasen ligger i appens /data (vedvarende, i backup).
 # /config = addon_config. Legg gamle bilder i /config/faces/<navn>/ og sett legacy_import_folder til /config/faces for import.
 map:
   - addon_config:rw

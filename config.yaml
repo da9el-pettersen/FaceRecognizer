@@ -1,6 +1,8 @@
 name: Face Recognizer
 version: "0.1.0"
 slug: face_recognizer
+# Ferdigbygd image (se .github/workflows/publish-addons.yml). Taggen er versjonen under.
+image: ghcr.io/da9el-pettersen/facerecognizer-recognition
 description: Ansiktsgjenkjenning og liveness fra Reolink-kamera, resultat via MQTT
 arch:
   - amd64
@@ -26,7 +28,7 @@ options:
     provider: "DeepFace"
     threshold: 0.98
   deepface:
-    base_url: "http://local-deepface:5000"
+    base_url: "http://def5d25e-deepface:5000"
     auth_token: ""
     model_name: "SFace"
     threshold: 0.5
@@ -38,7 +40,7 @@ options:
     url: "http://+:8099"
   # Database-tjenesten (eget image, se README).
   database:
-    base_url: "http://local-face-database:8080"
+    base_url: "http://def5d25e-face-database:8080"
     token: ""
 schema:
   camera:

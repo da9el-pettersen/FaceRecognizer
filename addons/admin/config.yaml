@@ -27,10 +27,10 @@ options:
     token: ""
     allowed_users: ""
   database:
-    base_url: "http://local-face-database:8080"
+    base_url: "http://def5d25e-face-database:8080"
     token: ""
   recognition:
-    base_url: "http://local-face-recognizer:8099"
+    base_url: "http://def5d25e-face-recognizer:8099"
     token: ""
 schema:
   admin:

@@ -7,7 +7,7 @@ arch:
 startup: services
 boot: auto
 init: false
-# Ingen "ports": API-et er kun nåbart fra andre apper på HA sitt interne nett (host local-deepface:5000).
+# Ingen "ports": API-et er kun nåbart fra andre apper på HA sitt interne nett (host def5d25e-deepface:5000).
 options:
   auth_token: ""
 schema:

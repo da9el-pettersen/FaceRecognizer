@@ -70,30 +70,32 @@ Alle kall krever `Authorization: Bearer <ADMIN_TOKEN>`.
 
 Resultatet på MQTT inneholder i tillegg `personId` (GUID) for gjenkjente personer.
 
-## Installere på HAOS (tre apper)
-Alle tre kjører som HA-apper på HAOS-maskinen og snakker over HA sitt interne nett (ingen porter åpnes mot LAN, unntatt Admin hvis du slår det på).
+## Installere på HAOS (fire apper fra dette repoet)
+Alt gjøres i HA-nettgrensesnittet. Appene hentes direkte fra GitHub (repoet må være offentlig), og ingenting bygges på HAOS-maskinen for Database, Admin og Recognition.
 
-1. **Publiser images for Database og Admin** (HA bygger dem ikke selv, byggekonteksten er app-mappen): push en tag, f.eks.
-   `git tag v0.1.0 && git push --tags`. Workflowen `publish-addons.yml` bygger og pusher
-   `ghcr.io/da9el-pettersen/facerecognizer-database` og `-admin` (gjør pakkene offentlige, eller logg inn i HA).
-   Taggen må være lik `version` i `addons/*/config.yaml`.
-2. **Kopier appene til HAOS** (Samba/SSH-appen): `addons/database` → `/addons/face_database`, `addons/admin` →
-   `/addons/face_admin`, i tillegg til Recognition (rotmappen) og `deepface/` som før. Under Innstillinger → Apper → Lokale apper.
+1. **Publiser imagene (én gang per versjon):** `git tag v0.1.0 && git push origin v0.1.0`. Workflowen `publish-addons.yml` bygger og pusher
+   `ghcr.io/da9el-pettersen/facerecognizer-recognition`, `-database` og `-admin`. Taggen må være lik `version` i `config.yaml`-filene.
+   Sjekk at pakkene er offentlige (GitHub → Packages → Package settings → Visibility).
+2. **Legg til repoet:** Innstillinger → Apper → Appbutikk → ⋮ → Egendefinerte repoer → `https://github.com/da9el-pettersen/FaceRecognizer`.
+   Installer «DeepFace», «Face Database», «Face Recognizer» og «Face Admin».
 3. **Lag tre tokens** (ulike verdier) og fyll inn:
 
 | App | Innstilling | Verdi |
 |---|---|---|
+| DeepFace | `auth_token` | `DEEPFACE_AUTH_TOKEN` |
 | Face Database | `token` | `DATABASE_TOKEN` |
-| Face Recognizer | `database.token` / `api.token` | `DATABASE_TOKEN` / `RECOGNITION_API_TOKEN` |
-| Face Admin | `database.token` / `recognition.token` / `admin.token` | `DATABASE_TOKEN` / `RECOGNITION_API_TOKEN` / `ADMIN_TOKEN` |
+| Face Recognizer | `deepface.auth_token` / `database.token` / `api.token` | `DEEPFACE_AUTH_TOKEN` / `DATABASE_TOKEN` / `RECOGNITION_API_TOKEN` |
+| Face Admin | `database.token` / `recognition.token` | `DATABASE_TOKEN` / `RECOGNITION_API_TOKEN` |
 
-4. **Start-rekkefølge:** Mosquitto, Face Database, DeepFace, Face Recognizer, Face Admin. Recognition prøver på nytt hvert 10. sekund til Database svarer.
-5. **Bruk Admin:** «Face Admin» dukker opp i HA-sidepanelet (ingress). HA-brukeren stoles på (kun når kallet kommer fra Supervisor `172.30.32.2` med `X-Remote-User-Id`), så ingen ekstra innlogging. Sett `admin.allowed_users` (HA-brukernavn eller bruker-ID, kommaseparert) for å begrense hvem som slippes inn; tom = alle innloggede HA-brukere (`panel_admin: true` skjuler i tillegg panelet for ikke-administratorer, men håndhever ikke). Endringer logges med brukernavn. Direkte kall (port 8080 på LAN, `enroll`, skript) krever fortsatt `Authorization: Bearer <ADMIN_TOKEN>`; `admin.token` er valgfritt når du bare bruker ingress. Siden lar deg opprette/slette personer, laste opp bilder, slette enkeltbilder og reindeksere.
-6. **Eldre bilder:** legg dem i Face Database sin konfigurasjonsmappe (`/addon_configs/<slug>_face_database/faces/<navn>/`), sett
+   Recognition trenger i tillegg `camera.*` (adresse, bruker, passord og `certificate_sha256`).
+4. **Kontroller hostnavn:** appene finner hverandre på `def5d25e-deepface`, `def5d25e-face-database` og `def5d25e-face-recognizer`
+   (`def5d25e` er en hash av repo-adressen). Hostnavnet står på hver apps infoside; avviker det, rett `base_url` i innstillingene.
+5. **Start-rekkefølge:** Mosquitto, Face Database, DeepFace, Face Recognizer, Face Admin. Recognition prøver på nytt hvert 10. sekund til Database svarer.
+6. **Bruk Admin:** «Face Admin» dukker opp i HA-sidepanelet (ingress). HA-brukeren stoles på (kun når kallet kommer fra Supervisor `172.30.32.2` med `X-Remote-User-Id`), så ingen ekstra innlogging. Sett `admin.allowed_users` (HA-brukernavn eller bruker-ID, kommaseparert) for å begrense hvem som slippes inn; tom = alle innloggede HA-brukere (`panel_admin: true` skjuler i tillegg panelet for ikke-administratorer, men håndhever ikke). Endringer logges med brukernavn. Direkte kall (port 8080 på LAN, `enroll`, skript) krever `Authorization: Bearer <ADMIN_TOKEN>`; `admin.token` er valgfritt når du bare bruker ingress.
+7. **Eldre bilder:** legg dem i Face Database sin konfigurasjonsmappe (`/addon_configs/<slug>_face_database/faces/<navn>/`), sett
    `legacy_import_folder` til `/config/faces`, start om, og kjør `POST /api/reindex`.
 
-Verter mellom appene: `local-face-database:8080` og `local-face-recognizer:8099`. Databasen ligger i appens `/data` og tas med i HA-backup.
-
+Databasen ligger i appens `/data` og tas med i HA-backup.
 ## Lokal test (Docker Compose, uten HAOS)
 ```powershell
 Copy-Item .env.example .env        # fyll inn DEEPFACE_AUTH_TOKEN, DATABASE_TOKEN, RECOGNITION_API_TOKEN, ADMIN_TOKEN, CAMERA_*; .env ligger i .gitignore
@@ -129,9 +131,9 @@ Resultatet (`facerecognizer/result`, retained):
 Ingen bilder eller embeddings. Alle feil gir `error` (døren forblir låst).
 
 ## Home Assistant OS
-HAOS kjører ikke Compose. Bruk to apper (kopier til `/addons/` via Samba):
-1. `deepface/` → `/addons/deepface` (app «DeepFace», vert `local-deepface`, port 5000 kun internt). Sett `auth_token`.
-2. Resten av repoet (uten `deepface/`, `.git`, `testdata`) → `/addons/face_recognizer`. Sett `face.provider: DeepFace`,
+HAOS kjører ikke Compose. Bruk appene fra dette repoet (se «Installere på HAOS»):
+1. «DeepFace» (vert `def5d25e-deepface`, port 5000 kun internt). Sett `auth_token`.
+2. «Face Recognizer». Sett `face.provider: DeepFace`,
    `deepface.auth_token` (samme token), `camera.*` og `camera.certificate_sha256`. MQTT hentes automatisk fra Mosquitto-appen.
 Se `DOCS.md` og `ha/automations.example.yaml`.
 
