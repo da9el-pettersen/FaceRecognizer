@@ -1,9 +1,13 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/FaceRecognizer.Admin/FaceRecognizer.Admin.csproj" />
     <Project Path="src/FaceRecognizer.Contracts/FaceRecognizer.Contracts.csproj" />
+    <Project Path="src/FaceRecognizer.Database/FaceRecognizer.Database.csproj" />
     <Project Path="src/FaceRecognizer.Recognition/FaceRecognizer.Recognition.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/FaceRecognizer.Admin.Tests/FaceRecognizer.Admin.Tests.csproj" />
+    <Project Path="tests/FaceRecognizer.Database.Tests/FaceRecognizer.Database.Tests.csproj" />
     <Project Path="tests/FaceRecognizer.Recognition.Tests/FaceRecognizer.Recognition.Tests.csproj" />
   </Folder>
 </Solution>

@@ -7,9 +7,14 @@ services:
     depends_on:
       deepface:
         condition: service_healthy
+      database:
+        condition: service_started
     environment:
       FACE_RECOGNITION_PROVIDER: ${FACE_RECOGNITION_PROVIDER:-DeepFace}
-      Face__ReferenceFolder: /data/faces
+      Database__BaseUrl: http://database:8080
+      Database__Token: ${DATABASE_TOKEN:?Sett DATABASE_TOKEN i .env}
+      Api__Token: ${RECOGNITION_API_TOKEN:?Sett RECOGNITION_API_TOKEN i .env}
+      Api__Url: http://+:8099
       Face__Threshold: ${FACEAISHARP_THRESHOLD:-0.98}
       DeepFace__BaseUrl: http://deepface:5000
       DeepFace__AuthToken: ${DEEPFACE_AUTH_TOKEN:?Sett DEEPFACE_AUTH_TOKEN i .env}
@@ -25,8 +30,40 @@ services:
       Camera__Password: ${CAMERA_PASSWORD:-}
       Camera__CertificateSha256: ${CAMERA_CERT_SHA256:-}
     volumes:
-      - ./faces:/data/faces
       - ./selftest-out:/data/selftest
+    networks: [internal, lan]
+
+  database:
+    build:
+      context: .
+      dockerfile: src/FaceRecognizer.Database/Dockerfile
+    restart: unless-stopped
+    environment:
+      Database__Token: ${DATABASE_TOKEN:?Sett DATABASE_TOKEN i .env}
+      Database__LegacyImportFolder: /legacy-faces
+      Mqtt__Host: ${MQTT_HOST:-mosquitto}
+      Mqtt__Port: ${MQTT_PORT:-1883}
+      Mqtt__Username: ${MQTT_USERNAME:-}
+      Mqtt__Password: ${MQTT_PASSWORD:-}
+    volumes:
+      - database-data:/data
+      - ./faces:/legacy-faces:ro
+    networks: [internal]
+
+  admin:
+    build:
+      context: .
+      dockerfile: src/FaceRecognizer.Admin/Dockerfile
+    restart: unless-stopped
+    depends_on: [database, recognition]
+    environment:
+      Admin__Token: ${ADMIN_TOKEN:?Sett ADMIN_TOKEN i .env}
+      Database__BaseUrl: http://database:8080
+      Database__Token: ${DATABASE_TOKEN:?Sett DATABASE_TOKEN i .env}
+      Recognition__BaseUrl: http://recognition:8099
+      Recognition__Token: ${RECOGNITION_API_TOKEN:?Sett RECOGNITION_API_TOKEN i .env}
+    ports:
+      - "8080:8080"
     networks: [internal, lan]
 
   deepface:
@@ -52,6 +89,8 @@ services:
       - ./deploy/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
     networks: [internal]
 
+volumes:
+  database-data: {}
 
 networks:
   # internal: true gir ingen vei ut til internett. DeepFace og Mosquitto ligger kun her.

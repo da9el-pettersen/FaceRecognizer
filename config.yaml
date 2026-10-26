@@ -32,6 +32,14 @@ options:
     threshold: 0.5
   liveness:
     min_score: 0.8
+  # Intern API (/internal/embed) som Admin-tjenesten bruker. Tomt token = av.
+  api:
+    token: ""
+    url: "http://+:8099"
+  # Database-tjenesten (eget image, se README).
+  database:
+    base_url: "http://local-face-database:8080"
+    token: ""
 schema:
   camera:
     name: str
@@ -50,6 +58,12 @@ schema:
     threshold: float(0.1,1)
   liveness:
     min_score: float(0.5,1)
+  api:
+    token: password
+    url: str
+  database:
+    base_url: url
+    token: password
   # Valgfri overstyring. Utelatt = bruk MQTT fra Supervisor.
   mqtt:
     host: str?

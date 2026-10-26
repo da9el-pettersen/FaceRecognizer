@@ -1,5 +1,6 @@
 using System.Threading.Channels;
 using FaceAiSharp;
+using FaceRecognizer.Contracts;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 using FaceRecognizer.Recognition.Engines;
@@ -10,32 +11,38 @@ using FaceRecognizer.Recognition.Pipeline;
 using FaceRecognizer.Recognition.Configuration;
 using FaceRecognizer.Recognition.Health;
 using FaceRecognizer.Recognition.Tools;
+using FaceRecognizer.Recognition.Api;
 
-var builder = Host.CreateApplicationBuilder(args);
+var builder = WebApplication.CreateBuilder(args);
 
-if (File.Exists(HomeAssistantAddon.OptionsPath))
-{
-    // Kjører som HA-app: innstillinger fra /data/options.json, MQTT fra Supervisor.
-    var settings = HomeAssistantAddon.FlattenOptions(File.ReadAllText(HomeAssistantAddon.OptionsPath));
-    settings.TryAdd("Face:ReferenceFolder", HomeAssistantAddon.FacesFolder);
-    var supervisorToken = Environment.GetEnvironmentVariable("SUPERVISOR_TOKEN");
-    if (!settings.ContainsKey("Mqtt:Host") && !string.IsNullOrEmpty(supervisorToken))
-    {
-        using var http = new HttpClient();
-        foreach (var (key, value) in await HomeAssistantAddon.GetMqttServiceAsync(http, supervisorToken, default))
-        {
-            settings[key] = value;
-        }
-    }
-
-    builder.Configuration.AddInMemoryCollection(settings);
-}
+// Kjører som HA-app: innstillinger fra /data/options.json, MQTT fra Supervisor.
+await builder.Configuration.AddHomeAssistantOptionsAsync(useMqttService: true);
 
 builder.Services.Configure<MqttOptions>(builder.Configuration.GetSection("Mqtt"));
 builder.Services.Configure<CameraOptions>(builder.Configuration.GetSection("Camera"));
 builder.Services.Configure<PipelineOptions>(builder.Configuration.GetSection("Pipeline"));
 builder.Services.Configure<FaceMatchOptions>(builder.Configuration.GetSection("Face"));
 builder.Services.Configure<LivenessOptions>(builder.Configuration.GetSection("Liveness"));
+builder.Services.Configure<DatabaseOptions>(builder.Configuration.GetSection("Database"));
+builder.Services.AddSingleton<FaceMetrics>();
+builder.Services.AddSingleton<ReferenceReloadSignal>();
+builder.Services.AddHostedService<ReferenceReloadWorker>();
+
+// Embeddings hentes fra databasetjenesten (kun lesing).
+builder.Services.AddHttpClient<IEmbeddingSource, DatabaseEmbeddingSource>((sp, client) =>
+{
+    var database = sp.GetRequiredService<IOptions<DatabaseOptions>>().Value;
+    client.BaseAddress = new Uri(database.BaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+    if (!string.IsNullOrEmpty(database.Token))
+    {
+        client.DefaultRequestHeaders.Authorization = new("Bearer", database.Token);
+    }
+});
+
+// Internt API for embedding-generering: kun aktivt med token, og lytter lokalt med mindre Api:Url sier noe annet.
+var apiOptions = builder.Configuration.GetSection("Api").Get<InternalApiOptions>() ?? new InternalApiOptions();
+builder.WebHost.UseUrls(apiOptions.Url);
 
 // Porten forkaster triggere mens vi er opptatt; kanalen bærer kun den ene aksepterte triggeren.
 builder.Services.AddSingleton<TriggerGate>();
@@ -94,7 +101,10 @@ else
     builder.Services.AddSingleton<IFaceRecognitionProvider>(sp => new FaceAiSharpRecognitionProvider(
         FaceAiSharpBundleFactory.CreateFaceDetectorWithLandmarks(),
         FaceAiSharpBundleFactory.CreateFaceEmbeddingsGenerator(),
-        sp.GetRequiredService<IOptions<FaceMatchOptions>>().Value));
+        sp.GetRequiredService<IOptions<FaceMatchOptions>>().Value,
+        sp.GetRequiredService<IEmbeddingSource>(),
+        sp.GetRequiredService<FaceMetrics>(),
+        sp.GetRequiredService<ILogger<FaceAiSharpRecognitionProvider>>()));
 }
 builder.Services.AddSingleton<ILivenessChecker>(sp => new MiniFasNetLivenessChecker(
     FaceAiSharpBundleFactory.CreateFaceDetectorWithLandmarks(),
@@ -106,15 +116,21 @@ builder.Services.AddHostedService<RecognitionWorker>();
 // IHttpClientFactory logger hver forespørsel på Information; vi vil kun se advarsler.
 builder.Logging.AddFilter("System.Net.Http.HttpClient", LogLevel.Warning);
 
+var app = builder.Build();
 if (args.Contains("selftest"))
 {
-    return await SelfTest.RunAsync(builder.Build().Services, args);
+    return await SelfTest.RunAsync(app.Services, args);
 }
 
 if (args.Contains("enroll"))
 {
-    return await Enroll.RunAsync(builder.Build().Services, args);
+    return await Enroll.RunAsync(app.Services, args);
 }
 
-builder.Build().Run();
+if (!string.IsNullOrEmpty(apiOptions.Token))
+{
+    app.MapInternalApi(apiOptions.Token);
+}
+
+app.Run();
 return 0;

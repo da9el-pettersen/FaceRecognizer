@@ -56,6 +56,26 @@ public sealed class CameraOptions
     public TimeSpan IrSettleDelay { get; set; } = TimeSpan.FromSeconds(2);
 }
 
+/// <summary>Innstillinger for det interne API-et som Admin bruker til å lage embeddings.</summary>
+public sealed class InternalApiOptions
+{
+    /// <summary>Delt hemmelighet. Tomt = API-et er slått av. Sendes som <c>Authorization: Bearer</c>.</summary>
+    public string Token { get; set; } = "";
+
+    /// <summary>Adresse API-et lytter på. Standard er kun lokalt; bruk <c>http://+:8099</c> for å nå det fra andre containere.</summary>
+    public string Url { get; set; } = "http://127.0.0.1:8099";
+}
+
+/// <summary>Innstillinger for tilkobling til databasetjenesten (kun lesing av embeddings).</summary>
+public sealed class DatabaseOptions
+{
+    /// <summary>Intern adresse til databasetjenesten.</summary>
+    public string BaseUrl { get; set; } = "http://database:8080";
+
+    /// <summary>Delt hemmelighet for databasetjenesten.</summary>
+    public string Token { get; set; } = "";
+}
+
 /// <summary>Innstillinger for selve pipelinen.</summary>
 public sealed class PipelineOptions
 {

@@ -31,6 +31,7 @@ public enum RecognitionOutcome
 /// <param name="CameraName">Navn på kameraet bildet kom fra.</param>
 /// <param name="FaceCount">Antall ansikter funnet i bildet. Ved flere enn ett vurderes kun det største.</param>
 /// <param name="Provider">Ansiktsmotoren som ble brukt.</param>
+/// <param name="PersonId">Unik ID for matchet person, ellers <c>null</c>.</param>
 public sealed record RecognitionResult(
     RecognitionOutcome Outcome,
     string? PersonName,
@@ -39,7 +40,8 @@ public sealed record RecognitionResult(
     float LivenessScore = 0f,
     string? CameraName = null,
     int FaceCount = 0,
-    string? Provider = null)
+    string? Provider = null,
+    Guid? PersonId = null)
 {
     /// <summary>MQTT-topic resultatet publiseres på.</summary>
     public const string Topic = "facerecognizer/result";

@@ -1,5 +1,8 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using FaceRecognizer.Contracts;
 using Microsoft.Extensions.Options;
-using FaceRecognizer.Recognition.Engines;
 using FaceRecognizer.Recognition.Camera;
 using FaceRecognizer.Recognition.Configuration;
 
@@ -7,7 +10,8 @@ namespace FaceRecognizer.Recognition.Tools;
 
 /// <summary>
 /// Registrerer en person fra kameraet: <c>enroll &lt;person-ID&gt; [--count N] [--ir]</c>.
-/// Tar flere snapshots med nedtelling mellom hver, og lagrer kun bilder med nøyaktig ett ansikt i referanselageret.
+/// Tar flere snapshots med nedtelling mellom hver og sender dem til Admin-API-et (<c>Admin:BaseUrl</c> og
+/// <c>Admin:Token</c>). Admin avviser bilder uten nøyaktig ett ansikt.
 /// </summary>
 public static class Enroll
 {
@@ -32,7 +36,7 @@ public static class Enroll
     {
         var index = Array.IndexOf(args, "enroll");
         var personId = args.Length > index + 1 ? args[index + 1] : "";
-        if (!ReferenceStore.IsValidPersonId(personId))
+        if (!PersonNames.IsValid(personId))
         {
             Console.WriteLine("Bruk: enroll <person-ID> [--count N] [--ir]  (bokstaver, tall, mellomrom, _ og -)");
             return 1;
@@ -49,7 +53,7 @@ public static class Enroll
 
         var withIr = args.Contains("--ir");
         var camera = services.GetRequiredService<ReolinkCamera>();
-        var provider = services.GetRequiredService<IFaceRecognitionProvider>();
+        var configuration = services.GetRequiredService<IConfiguration>();
         var cameraOptions = services.GetRequiredService<IOptions<CameraOptions>>().Value;
         using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
         var ct = cts.Token;
@@ -60,13 +64,24 @@ public static class Enroll
             return 2;
         }
 
-        Console.WriteLine($"Registrerer '{personId}' med {count} bilder{(withIr ? " + 2 IR-bilder" : "")}, motor: {provider.Name}");
+        var adminUrl = configuration["Admin:BaseUrl"];
+        if (string.IsNullOrWhiteSpace(adminUrl) || string.IsNullOrWhiteSpace(configuration["Admin:Token"]))
+        {
+            Console.WriteLine("FEIL: Admin:BaseUrl og Admin:Token må være satt.");
+            return 2;
+        }
+
+        using var admin = new HttpClient { BaseAddress = new Uri(adminUrl), Timeout = TimeSpan.FromSeconds(60) };
+        admin.DefaultRequestHeaders.Authorization = new("Bearer", configuration["Admin:Token"]);
+
+        Console.WriteLine($"Registrerer '{personId}' med {count} bilder{(withIr ? " + 2 IR-bilder" : "")}");
         var saved = 0;
         try
         {
+            var person = await GetOrCreatePersonAsync(admin, personId, ct);
             for (var i = 0; i < count; i++)
             {
-                saved += await CaptureAsync(camera, provider, personId, Instructions[i % Instructions.Length], i + 1, count, ct) ? 1 : 0;
+                saved += await CaptureAsync(camera, admin, person, Instructions[i % Instructions.Length], i + 1, count, ct) ? 1 : 0;
             }
 
             if (withIr)
@@ -77,7 +92,7 @@ public static class Enroll
                     await Task.Delay(cameraOptions.IrSettleDelay, ct);
                     for (var i = 0; i < 2; i++)
                     {
-                        saved += await CaptureAsync(camera, provider, personId, "IR-bilde: se rett inn i kameraet", i + 1, 2, ct) ? 1 : 0;
+                        saved += await CaptureAsync(camera, admin, person, "IR-bilde: se rett inn i kameraet", i + 1, 2, ct) ? 1 : 0;
                     }
                 }
                 finally
@@ -88,7 +103,7 @@ public static class Enroll
         }
         catch (HttpRequestException ex)
         {
-            Console.WriteLine($"FEIL: kamera eller ansiktsmotor utilgjengelig: {ex.Message}");
+            Console.WriteLine($"FEIL: kamera eller Admin utilgjengelig: {ex.Message}");
             return 3;
         }
         catch (InvalidOperationException ex)
@@ -101,8 +116,27 @@ public static class Enroll
         return saved > 0 ? 0 : 1;
     }
 
+    private static async Task<PersonDto> GetOrCreatePersonAsync(HttpClient admin, string name, CancellationToken ct)
+    {
+        using var created = await admin.PostAsJsonAsync("/api/persons", new CreatePersonRequest(name), ct);
+        if (created.StatusCode == HttpStatusCode.Created)
+        {
+            return (await created.Content.ReadFromJsonAsync<PersonDto>(ct))!;
+        }
+
+        if (created.StatusCode != HttpStatusCode.Conflict)
+        {
+            throw new InvalidOperationException($"Admin svarte {(int)created.StatusCode} ved opprettelse av person.");
+        }
+
+        var persons = await admin.GetFromJsonAsync<List<PersonSummaryDto>>("/api/persons", ct) ?? [];
+        var existing = persons.FirstOrDefault(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidOperationException("Personen finnes, men ble ikke funnet.");
+        return new PersonDto(existing.PersonId, existing.Name);
+    }
+
     private static async Task<bool> CaptureAsync(
-        ReolinkCamera camera, IFaceRecognitionProvider provider, string personId,
+        ReolinkCamera camera, HttpClient admin, PersonDto person,
         string instruction, int number, int total, CancellationToken ct)
     {
         Console.WriteLine($"[{number}/{total}] {instruction}");
@@ -117,17 +151,23 @@ public static class Enroll
         for (var attempt = 1; attempt <= MaxAttempts; attempt++)
         {
             last = await camera.GetSnapshotAsync(ct);
-            try
+            var status = await UploadAsync(admin, person.PersonId, last, ct);
+            if (status == "added")
             {
-                await provider.RegisterAsync(personId, last, ct);
                 Console.WriteLine($"  OK: lagret (forsøk {attempt})");
                 return true;
             }
-            catch (ArgumentException)
+
+            if (status == "duplicate")
+            {
+                Console.WriteLine("  Identisk bilde er allerede registrert, prøver igjen...");
+            }
+            else
             {
                 Console.WriteLine($"  forsøk {attempt}/{MaxAttempts}: ikke nøyaktig ett ansikt funnet, prøver igjen...");
-                await Task.Delay(TimeSpan.FromSeconds(1), ct);
             }
+
+            await Task.Delay(TimeSpan.FromSeconds(1), ct);
         }
 
         var rejectedPath = Path.Combine(Environment.GetEnvironmentVariable("SELFTEST_OUTPUT") ?? "/data/selftest", "enroll-avvist.jpg");
@@ -135,5 +175,21 @@ public static class Enroll
         await File.WriteAllBytesAsync(rejectedPath, last!, ct);
         Console.WriteLine($"  Hoppet over. Siste avviste bilde lagret i {rejectedPath}");
         return false;
+    }
+
+    private static async Task<string> UploadAsync(HttpClient admin, Guid personId, byte[] image, CancellationToken ct)
+    {
+        using var content = new MultipartFormDataContent();
+        var file = new ByteArrayContent(image);
+        file.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");
+        content.Add(file, "files", "snapshot.jpg");
+        using var response = await admin.PostAsync($"/api/persons/{personId}/images", content, ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException($"Admin svarte {(int)response.StatusCode} ved opplasting.");
+        }
+
+        var results = await response.Content.ReadFromJsonAsync<List<ImageUploadResult>>(ct) ?? [];
+        return results.FirstOrDefault()?.Status ?? "invalid";
     }
 }

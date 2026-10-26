@@ -11,18 +11,10 @@ using FaceRecognizer.Recognition.Pipeline;
 namespace FaceRecognizer.Recognition.Tests;
 
 /// <summary>Kontrakttester mot DeepFace <c>/represent</c> med en stub som erstatter selve DeepFace.</summary>
-public sealed class DeepFaceRecognitionProviderTests : IDisposable
+public sealed class DeepFaceRecognitionProviderTests
 {
-    private readonly string _folder = Path.Combine(Path.GetTempPath(), "fr-tests-" + Guid.NewGuid().ToString("N"));
     private readonly StubDeepFace _stub = new();
-
-    public void Dispose()
-    {
-        if (Directory.Exists(_folder))
-        {
-            Directory.Delete(_folder, true);
-        }
-    }
+    private readonly InMemoryEmbeddingSource _source = new();
 
     private DeepFaceRecognitionProvider CreateProvider(Action<DeepFaceOptions>? configure = null)
     {
@@ -33,8 +25,29 @@ public sealed class DeepFaceRecognitionProviderTests : IDisposable
         return new DeepFaceRecognitionProvider(
             http,
             Options.Create(options),
-            Options.Create(new FaceMatchOptions { ReferenceFolder = _folder }),
+            _source,
             NullLogger<DeepFaceRecognitionProvider>.Instance);
+    }
+
+    // Simulerer Admin: embedder bildet via motoren, lagrer i kilden og laster indeksen på nytt.
+    private async Task RegisterAsync(DeepFaceRecognitionProvider provider, string name, byte[] image)
+    {
+        var embedding = Assert.Single(await provider.EmbedAsync(image));
+        _source.Add(provider.ModelId, Guid.NewGuid(), name, embedding);
+        await provider.LoadReferencesAsync();
+    }
+
+    private sealed class InMemoryEmbeddingSource : IEmbeddingSource
+    {
+        private readonly List<(string Model, EmbeddingDto Item)> _items = [];
+
+        public void Add(string model, Guid personId, string name, float[] embedding) =>
+            _items.Add((model, new EmbeddingDto(_items.Count + 1, personId, name, embedding)));
+
+        public Task<EmbeddingSnapshotDto> LoadAsync(string modelId, CancellationToken cancellationToken) =>
+            Task.FromResult(new EmbeddingSnapshotDto(
+                _items.Where(i => i.Model == modelId).Select(i => i.Item).ToList(),
+                _items.Count(i => i.Model != modelId)));
     }
 
     [Fact]
@@ -60,7 +73,7 @@ public sealed class DeepFaceRecognitionProviderTests : IDisposable
         _stub.Faces[1] = [new(1, 0, 0, 100, 100)];
         _stub.Faces[2] = [new(1, 0.1f, 0, 100, 100)];
         _stub.Faces[3] = [new(0, 0, 1, 100, 100)];
-        await provider.RegisterAsync("Ola", [1]);
+        await RegisterAsync(provider, "Ola", [1]);
 
         var known = Assert.Single(await provider.RecognizeAsync([2]));
         var unknown = Assert.Single(await provider.RecognizeAsync([3]));
@@ -76,7 +89,7 @@ public sealed class DeepFaceRecognitionProviderTests : IDisposable
     {
         var provider = CreateProvider();
         _stub.Faces[1] = [new(1, 0, 0, 100, 100)];
-        await provider.RegisterAsync("Ola", [1]);
+        await RegisterAsync(provider, "Ola", [1]);
         _stub.Faces[9] = [new(0, 1, 0, 50, 50), new(1, 0, 0, 200, 200)];
 
         var faces = await provider.RecognizeAsync([9]);
@@ -96,36 +109,31 @@ public sealed class DeepFaceRecognitionProviderTests : IDisposable
     }
 
     [Fact]
-    public async Task Registrering_lagres_varig_og_lastes_av_ny_instans()
-    {
-        var first = CreateProvider();
-        _stub.Faces[1] = [new(1, 0, 0, 100, 100)];
-        await first.RegisterAsync("Kari", [1]);
-
-        var second = CreateProvider();
-        await second.LoadReferencesAsync();
-
-        Assert.Equal(1, second.ReferenceCount);
-    }
-
-    [Theory]
-    [InlineData("../ut")]
-    [InlineData("a/b")]
-    [InlineData("")]
-    public async Task Ugyldig_person_id_avvises(string personId)
+    public async Task Embed_gir_normaliserte_embeddings_med_storste_ansikt_forst()
     {
         var provider = CreateProvider();
+        _stub.Faces[1] = [new(3, 4, 0, 50, 50), new(0, 0, 2, 200, 200)];
 
-        await Assert.ThrowsAsync<ArgumentException>(() => provider.RegisterAsync(personId, [1]));
+        var faces = await provider.EmbedAsync([1]);
+
+        Assert.Equal(2, faces.Count);
+        Assert.Equal(1f, faces[0][2], 4);
+        Assert.Equal(0.6f, faces[1][0], 4);
+        Assert.All(faces, f => Assert.Equal(1f, EmbeddingMath.Dot(f, f), 4));
     }
 
     [Fact]
-    public async Task Registrering_krever_noyaktig_ett_ansikt()
+    public async Task Gjenkjenning_laster_indeksen_ved_forste_bruk_og_ignorerer_andre_modeller()
     {
         var provider = CreateProvider();
-        _stub.Faces[1] = [new(1, 0, 0, 100, 100), new(0, 1, 0, 100, 100)];
+        _source.Add("annen-modell", Guid.NewGuid(), "Kari", [1, 0, 0]);
+        _source.Add(provider.ModelId, Guid.NewGuid(), "Ola", [1, 0, 0]);
+        _stub.Faces[1] = [new(1, 0, 0, 100, 100)];
 
-        await Assert.ThrowsAsync<ArgumentException>(() => provider.RegisterAsync("Ola", [1]));
+        var face = Assert.Single(await provider.RecognizeAsync([1]));
+
+        Assert.Equal("Ola", face.PersonName);
+        Assert.Equal(1, provider.ReferenceCount);
     }
 
     [Fact]
@@ -223,15 +231,23 @@ public sealed class DeepFaceRecognitionProviderTests : IDisposable
 
         var http = new HttpClient { BaseAddress = new Uri(url), Timeout = TimeSpan.FromSeconds(120) };
         http.DefaultRequestHeaders.Authorization = new("Bearer", token);
+        var source = new InMemoryEmbeddingSource();
         var provider = new DeepFaceRecognitionProvider(
             http,
             Options.Create(new DeepFaceOptions()),
-            Options.Create(new FaceMatchOptions { ReferenceFolder = _folder }),
+            source,
             NullLogger<DeepFaceRecognitionProvider>.Instance);
 
-        await provider.RegisterAsync("Person A", await File.ReadAllBytesAsync(Path.Combine(data, "img1.jpg")));
-        await provider.RegisterAsync("Person A", await File.ReadAllBytesAsync(Path.Combine(data, "img2.jpg")));
-        await provider.RegisterAsync("Person B", await File.ReadAllBytesAsync(Path.Combine(data, "img3.jpg")));
+        async Task Register(string name, string file)
+        {
+            var embedding = Assert.Single(await provider.EmbedAsync(await File.ReadAllBytesAsync(Path.Combine(data, file))));
+            source.Add(provider.ModelId, Guid.NewGuid(), name, embedding);
+        }
+
+        await Register("Person A", "img1.jpg");
+        await Register("Person A", "img2.jpg");
+        await Register("Person B", "img3.jpg");
+        await provider.LoadReferencesAsync();
 
         var same = await provider.RecognizeAsync(await File.ReadAllBytesAsync(Path.Combine(data, "img4.jpg")));
         var other = await provider.RecognizeAsync(await File.ReadAllBytesAsync(Path.Combine(data, "img12.jpg")));

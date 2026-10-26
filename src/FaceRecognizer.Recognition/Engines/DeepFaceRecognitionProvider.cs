@@ -41,36 +41,43 @@ public sealed class DeepFaceOptions
 
 /// <summary>
 /// Ansiktsmotor som bruker DeepFace REST API (<c>/represent</c>). Embeddings holdes kun i minnet og sammenlignes lokalt;
-/// bilder og embeddings logges eller publiseres aldri. Referansebildene lagres i <see cref="ReferenceStore"/>.
+/// bilder og embeddings logges eller publiseres aldri.
 /// </summary>
 public sealed class DeepFaceRecognitionProvider : IFaceRecognitionProvider
 {
     private readonly HttpClient _http;
     private readonly DeepFaceOptions _options;
-    private readonly FaceMatchOptions _faceOptions;
     private readonly ILogger<DeepFaceRecognitionProvider> _logger;
-    private readonly SemaphoreSlim _loadLock = new(1, 1);
-    private volatile bool _loaded;
-    private List<(string PersonId, float[] Embedding)> _references = [];
+    private readonly FaceMetrics _metrics;
 
     /// <summary>Oppretter motoren.</summary>
     public DeepFaceRecognitionProvider(
         HttpClient http,
         IOptions<DeepFaceOptions> options,
-        IOptions<FaceMatchOptions> faceOptions,
-        ILogger<DeepFaceRecognitionProvider> logger)
+        IEmbeddingSource source,
+        ILogger<DeepFaceRecognitionProvider> logger,
+        FaceMetrics? metrics = null)
     {
         _http = http;
         _options = options.Value;
-        _faceOptions = faceOptions.Value;
         _logger = logger;
+        _metrics = metrics ?? new FaceMetrics();
+        // Detektor og justering påvirker ansiktsutsnittet, så de er en del av modellversjonen.
+        References = new FaceReferenceService(
+            $"deepface:{_options.ModelName}:{_options.DetectorBackend}:align", source, logger);
     }
 
     /// <inheritdoc />
     public string Name => "DeepFace";
 
     /// <inheritdoc />
-    public int ReferenceCount => _references.Count;
+    public string ModelId => References.ModelId;
+
+    /// <summary>Minneindeksen for denne motoren.</summary>
+    public FaceReferenceService References { get; }
+
+    /// <inheritdoc />
+    public int ReferenceCount => References.Index.EmbeddingCount;
 
     /// <summary>Sjekker at DeepFace svarer.</summary>
     /// <param name="cancellationToken">Avbruddstoken.</param>
@@ -81,83 +88,23 @@ public sealed class DeepFaceRecognitionProvider : IFaceRecognitionProvider
     }
 
     /// <inheritdoc />
-    public async Task LoadReferencesAsync(CancellationToken cancellationToken = default)
-    {
-        await _loadLock.WaitAsync(cancellationToken);
-        try
-        {
-            var loaded = new List<(string, float[])>();
-            foreach (var (personId, path) in ReferenceStore.Enumerate(_faceOptions.ReferenceFolder))
-            {
-                var bytes = await File.ReadAllBytesAsync(path, cancellationToken);
-                try
-                {
-                    var faces = await RepresentAsync(bytes, cancellationToken);
-                    if (faces.Count == 1)
-                    {
-                        loaded.Add((personId, faces[0].Embedding));
-                    }
-                    else
-                    {
-                        _logger.LogWarning(
-                            "Hopper over referansebilde for {PersonId}: {Faces} ansikter (forventet 1).",
-                            personId, faces.Count);
-                    }
-                }
-                catch (InvalidOperationException)
-                {
-                    _logger.LogWarning("Hopper over referansebilde for {PersonId}: kunne ikke leses.", personId);
-                }
-            }
-
-            _references = loaded;
-            _loaded = true;
-        }
-        finally
-        {
-            _loadLock.Release();
-        }
-    }
+    public Task LoadReferencesAsync(CancellationToken cancellationToken = default) =>
+        References.LoadAsync(cancellationToken);
 
     /// <inheritdoc />
     public async Task<int> DetectFacesAsync(byte[] image, CancellationToken cancellationToken = default) =>
         (await RepresentAsync(image, cancellationToken)).Count;
 
     /// <inheritdoc />
-    public async Task RegisterAsync(string personId, byte[] image, CancellationToken cancellationToken = default)
-    {
-        if (!ReferenceStore.IsValidPersonId(personId))
-        {
-            throw new ArgumentException("Ugyldig person-ID.", nameof(personId));
-        }
-
-        var faces = await RepresentAsync(image, cancellationToken);
-        if (faces.Count != 1)
-        {
-            throw new ArgumentException("Referansebildet må inneholde nøyaktig ett ansikt.", nameof(image));
-        }
-
-        await ReferenceStore.SaveAsync(_faceOptions.ReferenceFolder, personId, image, cancellationToken);
-        await _loadLock.WaitAsync(cancellationToken);
-        try
-        {
-            _references = [.. _references, (personId, faces[0].Embedding)];
-        }
-        finally
-        {
-            _loadLock.Release();
-        }
-    }
+    public async Task<IReadOnlyList<float[]>> EmbedAsync(byte[] image, CancellationToken cancellationToken = default) =>
+        (await RepresentAsync(image, cancellationToken)).Select(f => f.Embedding).ToList();
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<FaceMatchResult>> RecognizeAsync(
         byte[] image, CancellationToken cancellationToken = default)
     {
-        // Lastes først ved behov, så en DeepFace som er nede ved oppstart ikke stopper tjenesten.
-        if (!_loaded)
-        {
-            await LoadReferencesAsync(cancellationToken);
-        }
+        // Lastes først ved behov, så en tjeneste som er nede ved oppstart ikke stopper gjenkjenning.
+        await References.EnsureLoadedAsync(cancellationToken);
 
         var faces = await RepresentAsync(image, cancellationToken);
         return faces.Select(face => Match(face.Embedding)).ToList();
@@ -165,44 +112,13 @@ public sealed class DeepFaceRecognitionProvider : IFaceRecognitionProvider
 
     private FaceMatchResult Match(float[] embedding)
     {
-        string? bestId = null;
-        var bestScore = float.MinValue;
-        foreach (var (personId, reference) in _references)
-        {
-            var score = CosineSimilarity(embedding, reference);
-            if (score > bestScore)
-            {
-                bestScore = score;
-                bestId = personId;
-            }
-        }
-
-        if (bestId is null)
-        {
-            return new FaceMatchResult(true, null, 0f, false);
-        }
-
-        var isMatch = bestScore >= _options.Threshold;
-        return new FaceMatchResult(true, isMatch ? bestId : null, bestScore, isMatch);
+        var start = FaceMetrics.Start();
+        var result = References.Match(embedding, _options.Threshold);
+        _metrics.Record(FaceStage.Matching, start);
+        return result;
     }
 
-    internal static float CosineSimilarity(float[] a, float[] b)
-    {
-        if (a.Length != b.Length || a.Length == 0)
-        {
-            return 0f;
-        }
-
-        double dot = 0, na = 0, nb = 0;
-        for (var i = 0; i < a.Length; i++)
-        {
-            dot += a[i] * b[i];
-            na += a[i] * a[i];
-            nb += b[i] * b[i];
-        }
-
-        return na == 0 || nb == 0 ? 0f : (float)(dot / (Math.Sqrt(na) * Math.Sqrt(nb)));
-    }
+    internal static float CosineSimilarity(float[] a, float[] b) => EmbeddingMath.CosineSimilarity(a, b);
 
     // Returnerer ansikter over sikkerhetsgrensen, største først.
     private async Task<List<RepresentedFace>> RepresentAsync(byte[] image, CancellationToken cancellationToken)
@@ -217,6 +133,7 @@ public sealed class DeepFaceRecognitionProvider : IFaceRecognitionProvider
 
         for (var attempt = 0; ; attempt++)
         {
+            var start = FaceMetrics.Start();
             try
             {
                 using var response = await _http.PostAsJsonAsync("/represent", request, cancellationToken);
@@ -238,11 +155,14 @@ public sealed class DeepFaceRecognitionProvider : IFaceRecognitionProvider
                 response.EnsureSuccessStatusCode();
                 var body = await response.Content.ReadFromJsonAsync<RepresentResponse>(cancellationToken)
                     ?? throw new InvalidOperationException("Tomt svar fra DeepFace.");
-                return (body.Results ?? [])
+                var faces = (body.Results ?? [])
                     .Where(r => r.FaceConfidence >= _options.MinFaceConfidence && r.Embedding.Length > 0)
                     .OrderByDescending(r => r.FacialArea.Width * r.FacialArea.Height)
+                    .Where(r => EmbeddingMath.Normalize(r.Embedding))
                     .Select(r => new RepresentedFace(r.Embedding))
                     .ToList();
+                _metrics.Record(FaceStage.DetectionAndEmbedding, start);
+                return faces;
             }
             catch (Exception ex) when (
                 attempt < _options.MaxRetries

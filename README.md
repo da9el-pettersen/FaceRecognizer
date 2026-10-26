@@ -29,26 +29,78 @@ Flere ansikter: største ansikt vurderes, `faceCount` publiseres (automasjonen k
 - API-et kan kun nås med `Authorization: Bearer <DEEPFACE_AUTH_TOKEN>`; containeren starter ikke uten token.
 - `/register` og `/search` brukes ikke (krever database). Registrerte personer lagres i stedet lokalt (se under).
 
+### Arkitektur: tre tjenester, tre images
+| Tjeneste | Ansvar | Kjenner til |
+|---|---|---|
+| `FaceRecognizer.Recognition` (rot-`Dockerfile`) | Deteksjon, embedding, matching mot minneindeks, MQTT mot HA | Database (leser embeddings), ingen admin |
+| `FaceRecognizer.Database` (`src/FaceRecognizer.Database/Dockerfile`) | Eier SQLite (personer, bilder, embeddings). REST + publiserer `EmbeddingsChanged` på MQTT | Ingenting om ansiktsmotor |
+| `FaceRecognizer.Admin` (`src/FaceRecognizer.Admin/Dockerfile`) | Administrasjons-API. Sender bilde til Recognition (`/internal/embed`) og lagrer resultatet i Database | Begge via HTTP |
+
+`FaceRecognizer.Contracts` har delte DTO-er. Tjenestene bruker delte bearer-tokens (`DATABASE_TOKEN`,
+`RECOGNITION_API_TOKEN`, `ADMIN_TOKEN`); Database og Admin starter ikke uten token (Recognition: intern API er av).
+Når Database endres publiseres `facerecognizer/embeddings/changed`, og Recognition laster indeksen på nytt atomisk.
+Embeddings (normalisert, én per bilde) lagres med modellversjon; embeddings fra andre modeller ignoreres.
+Kun Admin publiserer port (8080) mot LAN. Database og Recognition ligger på det interne nettet.
+Database og Admin finnes også som HA-apper (`addons/database`, `addons/admin`); se «Installere på HAOS» under.
+
 ### Registrere personer
-Legg ett eller flere bilder per person i `faces/<person-id>/*.jpg` (Compose monterer `./faces` som `/data/faces`; på HAOS
-`/addon_configs/<slug>_face_recognizer/faces/`). Bildet skal ha ett tydelig ansikt. Lastes ved oppstart og
-embeddings beregnes på nytt (bildene er den varige lagringen, så alt overlever restart).
-Ta bildene med kameraet (stå foran det; 4 s nedtelling mellom hvert bilde, 5-8 bilder anbefales):
+Ta bildene med kameraet (4 s nedtelling mellom hvert bilde, 5-8 bilder anbefales). `enroll` sender bildene til
+Admin-API-et (`Admin:BaseUrl` og `Admin:Token`):
 
 ```
-docker compose run --rm recognition enroll <person-id> [--count 6] [--ir]
+docker compose run --rm -e Admin__BaseUrl=http://admin:8080 -e Admin__Token=<ADMIN_TOKEN> recognition enroll <person-navn> [--count 6] [--ir]
 ```
 
-Bilder uten nøyaktig ett ansikt hoppes over. `--ir` tar i tillegg 2 IR-bilder.
-I kode: `IFaceRecognitionProvider.RegisterAsync(personId, bytes)` lagrer bildet og aktiverer personen umiddelbart.
+Bilder uten nøyaktig ett ansikt avvises. `--ir` tar i tillegg 2 IR-bilder.
+Migrering av eldre `faces/<navn>/*.jpg`: Database importerer mappen `Database:LegacyImportFolder` (Compose monterer
+`./faces`) som bilder uten embedding; kjør deretter `POST /api/reindex` mot Admin for å generere embeddings.
+
+### Administrasjons-API (Admin-tjenesten)
+Alle kall krever `Authorization: Bearer <ADMIN_TOKEN>`.
+
+| Kall | Funksjon |
+|---|---|
+| `GET /api/persons` | Personer med antall embeddings |
+| `POST /api/persons` `{"name":"Ola"}` | Opprett person (returnerer GUID) |
+| `POST /api/persons/{id}/images` (multipart, felt `files`) | Registrer flere ansiktsbilder |
+| `DELETE /api/persons/{id}/embeddings/{embeddingId}` | Slett ett referansebilde og embedding |
+| `DELETE /api/persons/{id}` | Slett person |
+| `POST /api/reindex?rebuild=true` | Embedder bilder uten embedding for gjeldende modell (`rebuild`: alle) |
+| `GET /api/metrics` | Tid for deteksjon, embedding og matching |
+
+Resultatet på MQTT inneholder i tillegg `personId` (GUID) for gjenkjente personer.
+
+## Installere på HAOS (tre apper)
+Alle tre kjører som HA-apper på HAOS-maskinen og snakker over HA sitt interne nett (ingen porter åpnes mot LAN, unntatt Admin hvis du slår det på).
+
+1. **Publiser images for Database og Admin** (HA bygger dem ikke selv, byggekonteksten er app-mappen): push en tag, f.eks.
+   `git tag v0.1.0 && git push --tags`. Workflowen `publish-addons.yml` bygger og pusher
+   `ghcr.io/da9el-pettersen/facerecognizer-database` og `-admin` (gjør pakkene offentlige, eller logg inn i HA).
+   Taggen må være lik `version` i `addons/*/config.yaml`.
+2. **Kopier appene til HAOS** (Samba/SSH-appen): `addons/database` → `/addons/face_database`, `addons/admin` →
+   `/addons/face_admin`, i tillegg til Recognition (rotmappen) og `deepface/` som før. Under Innstillinger → Apper → Lokale apper.
+3. **Lag tre tokens** (ulike verdier) og fyll inn:
+
+| App | Innstilling | Verdi |
+|---|---|---|
+| Face Database | `token` | `DATABASE_TOKEN` |
+| Face Recognizer | `database.token` / `api.token` | `DATABASE_TOKEN` / `RECOGNITION_API_TOKEN` |
+| Face Admin | `database.token` / `recognition.token` / `admin.token` | `DATABASE_TOKEN` / `RECOGNITION_API_TOKEN` / `ADMIN_TOKEN` |
+
+4. **Start-rekkefølge:** Mosquitto, Face Database, DeepFace, Face Recognizer, Face Admin. Recognition prøver på nytt hvert 10. sekund til Database svarer.
+5. **Bruk Admin:** «Face Admin» dukker opp i HA-sidepanelet (ingress). HA-brukeren stoles på (kun når kallet kommer fra Supervisor `172.30.32.2` med `X-Remote-User-Id`), så ingen ekstra innlogging. Sett `admin.allowed_users` (HA-brukernavn eller bruker-ID, kommaseparert) for å begrense hvem som slippes inn; tom = alle innloggede HA-brukere (`panel_admin: true` skjuler i tillegg panelet for ikke-administratorer, men håndhever ikke). Endringer logges med brukernavn. Direkte kall (port 8080 på LAN, `enroll`, skript) krever fortsatt `Authorization: Bearer <ADMIN_TOKEN>`; `admin.token` er valgfritt når du bare bruker ingress. Siden lar deg opprette/slette personer, laste opp bilder, slette enkeltbilder og reindeksere.
+6. **Eldre bilder:** legg dem i Face Database sin konfigurasjonsmappe (`/addon_configs/<slug>_face_database/faces/<navn>/`), sett
+   `legacy_import_folder` til `/config/faces`, start om, og kjør `POST /api/reindex`.
+
+Verter mellom appene: `local-face-database:8080` og `local-face-recognizer:8099`. Databasen ligger i appens `/data` og tas med i HA-backup.
 
 ## Lokal test (Docker Compose, uten HAOS)
 ```powershell
-Copy-Item .env.example .env        # fyll inn DEEPFACE_AUTH_TOKEN, CAMERA_*; .env ligger i .gitignore
+Copy-Item .env.example .env        # fyll inn DEEPFACE_AUTH_TOKEN, DATABASE_TOKEN, RECOGNITION_API_TOKEN, ADMIN_TOKEN, CAMERA_*; .env ligger i .gitignore
 docker compose --profile dev up -d --build   # dev = Mosquitto-testbroker på internt nett
 ```
-Nettverk: `internal` (`internal: true`, ingen vei ut) har DeepFace og Mosquitto; kun `recognition` er også på `lan` for å nå
-kameraet. Ingen porter publiseres.
+Nettverk: `internal` (`internal: true`, ingen vei ut) har DeepFace, Database og Mosquitto; `recognition` er også på `lan` for å nå
+kameraet, og `admin` for å publisere port 8080.
 
 ### 1. Test kamerakontakt (anbefalt første steg)
 1. Finn kameraets sertifikat-fingeravtrykk (kun TLS-handshake, ingen innlogging):

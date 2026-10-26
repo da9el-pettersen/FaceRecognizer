@@ -14,8 +14,9 @@ Selve låsehandlingen gjøres av en HA-automasjon (se `ha/automations.example.ya
 - **mqtt.***: valgfritt. Utelatt = MQTT-tilkobling hentes automatisk fra Mosquitto-appen.
 
 ## Referansebilder
-Legg bilder i app-ens konfigurasjonsmappe: `/addon_configs/<slug>_face_recognizer/faces/<navn>/*.jpg`.
-Appen laster dem ved oppstart. Alle bilder skal ha ett tydelig ansikt.
+Personer og referansebilder administreres i Admin-tjenesten og lagres i Database-tjenesten (egne images, se README).
+Sett `database.base_url`/`database.token` og `api.token` (må være lik `RECOGNITION_API_TOKEN` hos Admin).
+Appen henter embeddings fra Database og laster dem på nytt når Database varsler på MQTT.
 
 ## DeepFace-appen
 Installer `deepface/`-mappen som egen lokal app (`/addons/deepface`), sett `auth_token` og start den før Face Recognizer.

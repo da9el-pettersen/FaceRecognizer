@@ -1,0 +1,30 @@
+name: Face Database
+version: "0.1.0"
+slug: face_database
+description: Lagrer personer og ansiktsembeddings (SQLite) for Face Recognizer. Kun internt.
+# Ferdigbygd image (se .github/workflows/publish-addons.yml). Taggen er versjonen over.
+image: ghcr.io/da9el-pettersen/facerecognizer-database
+arch:
+  - amd64
+  - aarch64
+startup: services
+boot: auto
+init: false
+# Supervisor gir MQTT-tilkobling automatisk (Mosquitto-appen). Brukes til å varsle Recognition om endringer.
+services:
+  - mqtt:need
+# Ingen "ports": nåbar fra andre apper som local-face-database:8080. Databasen ligger i appens /data (vedvarende, i backup).
+# /config = addon_config. Legg gamle bilder i /config/faces/<navn>/ og sett legacy_import_folder til /config/faces for import.
+map:
+  - addon_config:rw
+options:
+  token: ""
+  legacy_import_folder: ""
+schema:
+  token: password
+  legacy_import_folder: str?
+  mqtt:
+    host: str?
+    port: port?
+    username: str?
+    password: password?

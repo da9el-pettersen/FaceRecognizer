@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="nb">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Face Admin</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; background: #f4f5f7; color: #1c1c1c; }
+  header { background: #03a9f4; color: #fff; padding: 12px 20px; display: flex; align-items: center; gap: 12px; }
+  header h1 { font-size: 1.2rem; margin: 0; flex: 1; }
+  main { max-width: 760px; margin: 20px auto; padding: 0 12px; }
+  section, .card { background: #fff; border-radius: 8px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 3px #0002; }
+  h2 { font-size: 1.05rem; margin: 0 0 10px; }
+  button { background: #03a9f4; color: #fff; border: 0; border-radius: 4px; padding: 7px 12px; cursor: pointer; }
+  button.danger { background: #d32f2f; }
+  button.light { background: #fff3; border: 1px solid #fff8; }
+  button:disabled { opacity: .5; cursor: default; }
+  input[type=text], input[type=password] { padding: 7px; border: 1px solid #bbb; border-radius: 4px; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .person-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+  .chip { background: #e8f4fd; border-radius: 12px; padding: 3px 4px 3px 10px; font-size: .85rem; display: flex; align-items: center; gap: 4px; }
+  .chip button { background: none; color: #d32f2f; padding: 0 6px; font-size: 1rem; }
+  .muted { color: #666; font-size: .9rem; }
+  .ok { color: #2e7d32; } .err { color: #c62828; }
+  #status { min-height: 1.3em; margin-bottom: 8px; }
+  ul.results { margin: 8px 0 0; padding-left: 18px; font-size: .9rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Face Admin</h1>
+  <span id="who" class="muted" style="color:#fff"></span>
+  <button class="light" id="reindex" hidden>Reindekser</button>
+  <button class="light" id="logout" hidden>Bytt token</button>
+</header>
+<main>
+  <section id="login" hidden>
+    <h2>Logg inn</h2>
+    <p class="muted">Skriv inn ADMIN_TOKEN. Tokenet lagres kun i denne fanen.</p>
+    <form class="row" id="loginForm">
+      <input type="password" id="token" placeholder="Token" autocomplete="off" required>
+      <button type="submit">Logg inn</button>
+    </form>
+  </section>
+
+  <div id="app" hidden>
+    <div id="status" role="status"></div>
+    <section>
+      <h2>Ny person</h2>
+      <form class="row" id="createForm">
+        <input type="text" id="newName" placeholder="Navn" maxlength="64" required>
+        <button type="submit">Opprett</button>
+      </form>
+    </section>
+    <div id="persons"></div>
+  </div>
+</main>
+
+<script>
+"use strict";
+// Relative adresser: appen kan ligge bak HA ingress med dynamisk basesti.
+const $ = id => document.getElementById(id);
+let token = sessionStorage.getItem("adminToken");
+
+function setStatus(text, ok) {
+  const el = $("status");
+  el.textContent = text;
+  el.className = ok ? "ok" : "err";
+}
+
+async function api(path, options = {}) {
+  const response = await fetch("api/" + path, {
+    ...options,
+    headers: { ...(options.headers || {}), ...(token ? { Authorization: "Bearer " + token } : {}) }
+  });
+  if (response.status === 401) {
+    showLogin();
+    throw new Error("Ugyldig token.");
+  }
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(body ? body.replace(/^"|"$/g, "") : "Feil " + response.status);
+  }
+  return response.status === 204 ? null : response.json();
+}
+
+function showLogin() {
+  sessionStorage.removeItem("adminToken");
+  token = null;
+  $("login").hidden = false;
+  $("app").hidden = true;
+  $("logout").hidden = true;
+  $("reindex").hidden = true;
+}
+
+function el(tag, props = {}, ...children) {
+  const node = Object.assign(document.createElement(tag), props);
+  node.append(...children);
+  return node;
+}
+
+async function run(action, successText) {
+  try {
+    await action();
+    if (successText) setStatus(successText, true);
+  } catch (error) {
+    setStatus(error.message, false);
+  }
+}
+
+async function load() {
+  const me = await api("me");
+  $("who").textContent = me.user && me.user !== "token" ? "Innlogget: " + me.user : "";
+  $("login").hidden = true;
+  $("app").hidden = false;
+  $("logout").hidden = false;
+  $("reindex").hidden = false;
+  const summaries = await api("persons");
+  const details = await Promise.all(summaries.map(p => api("persons/" + p.personId)));
+  const container = $("persons");
+  container.replaceChildren();
+  if (details.length === 0) {
+    container.append(el("p", { className: "muted" }, "Ingen personer registrert."));
+  }
+  for (const person of details) container.append(renderPerson(person));
+}
+
+function renderPerson(person) {
+  const chips = el("div", { className: "chips" });
+  for (const embedding of person.embeddings) {
+    const remove = el("button", { title: "Slett bilde", textContent: "×" });
+    remove.onclick = () => {
+      if (confirm("Slette referansebildet?"))
+        run(async () => { await api(`persons/${person.personId}/embeddings/${embedding.embeddingId}`, { method: "DELETE" }); await load(); }, "Bilde slettet.");
+    };
+    chips.append(el("span", { className: "chip" }, "Bilde #" + embedding.imageId, remove));
+  }
+
+  const files = el("input", { type: "file", accept: "image/jpeg,image/png", multiple: true });
+  const upload = el("button", { textContent: "Last opp" });
+  const results = el("ul", { className: "results" });
+  upload.onclick = () => run(async () => {
+    if (files.files.length === 0) throw new Error("Velg 1-20 bilder.");
+    const form = new FormData();
+    for (const file of files.files) form.append("files", file);
+    upload.disabled = true;
+    try {
+      const outcome = await api(`persons/${person.personId}/images`, { method: "POST", body: form });
+      const labels = { added: "lagt til", duplicate: "finnes fra før", rejected: "avvist (må ha nøyaktig ett ansikt)", invalid: "ugyldig fil" };
+      results.replaceChildren(...outcome.map(r => el("li", {}, `${r.fileName}: ${labels[r.status] || r.status}`)));
+      await refreshCounts();
+    } finally {
+      upload.disabled = false;
+    }
+  });
+
+  async function refreshCounts() {
+    const fresh = await api("persons/" + person.personId);
+    chips.replaceChildren(...renderPerson(fresh).querySelectorAll(".chip"));
+    count.textContent = `${fresh.embeddings.length} embeddings`;
+  }
+
+  const count = el("span", { className: "muted" }, `${person.embeddings.length} embeddings`);
+  const del = el("button", { className: "danger", textContent: "Slett person" });
+  del.onclick = () => {
+    if (confirm(`Slette ${person.name} og alle bilder?`))
+      run(async () => { await api("persons/" + person.personId, { method: "DELETE" }); await load(); }, "Person slettet.");
+  };
+
+  return el("div", { className: "card" },
+    el("div", { className: "person-head" }, el("div", {}, el("strong", {}, person.name), " ", count), del),
+    chips,
+    el("div", { className: "row" }, files, upload),
+    results);
+}
+
+$("loginForm").onsubmit = event => {
+  event.preventDefault();
+  token = $("token").value;
+  sessionStorage.setItem("adminToken", token);
+  $("token").value = "";
+  run(load);
+};
+$("logout").onclick = showLogin;
+$("createForm").onsubmit = event => {
+  event.preventDefault();
+  run(async () => {
+    await api("persons", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: $("newName").value }) });
+    $("newName").value = "";
+    await load();
+  }, "Person opprettet.");
+};
+$("reindex").onclick = () => run(async () => {
+  const result = await api("reindex", { method: "POST" });
+  await load();
+  setStatus(`Reindeksert: ${result.embedded} embeddet, ${result.failed} feilet.`, result.failed === 0);
+});
+
+// Via HA ingress er brukeren allerede identifisert; uten det vises tokenfeltet.
+(async () => {
+  try {
+    await load();
+  } catch (error) {
+    if (!token) { setStatus("", true); showLogin(); } else setStatus(error.message, false);
+  }
+})();
+</script>
+</body>
+</html>

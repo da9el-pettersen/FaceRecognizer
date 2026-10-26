@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "FaceRecognizer.Database": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:54394;http://localhost:54395"
+    }
+  }
+}

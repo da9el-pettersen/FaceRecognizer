@@ -17,6 +17,7 @@ public sealed class MqttGateway : BackgroundService
     private readonly MqttOptions _options;
     private readonly Channel<DateTimeOffset> _triggers;
     private readonly TriggerGate _gate;
+    private readonly ReferenceReloadSignal _reload;
     private readonly ILogger<MqttGateway> _logger;
     private readonly IMqttClient _client = new MqttClientFactory().CreateMqttClient();
 
@@ -25,11 +26,13 @@ public sealed class MqttGateway : BackgroundService
         IOptions<MqttOptions> options,
         Channel<DateTimeOffset> triggers,
         TriggerGate gate,
+        ReferenceReloadSignal reload,
         ILogger<MqttGateway> logger)
     {
         _options = options.Value;
         _triggers = triggers;
         _gate = gate;
+        _reload = reload;
         _logger = logger;
     }
 
@@ -50,6 +53,12 @@ public sealed class MqttGateway : BackgroundService
     {
         _client.ApplicationMessageReceivedAsync += e =>
         {
+            if (e.ApplicationMessage.Topic == EmbeddingsChanged.Topic)
+            {
+                _reload.Request();
+                return Task.CompletedTask;
+            }
+
             if (e.ApplicationMessage.Topic != _options.TriggerTopic)
             {
                 return Task.CompletedTask;
@@ -81,8 +90,13 @@ public sealed class MqttGateway : BackgroundService
             {
                 await _client.ConnectAsync(BuildClientOptions(), stoppingToken);
                 await _client.SubscribeAsync(
-                    new MqttClientSubscribeOptionsBuilder().WithTopicFilter(_options.TriggerTopic).Build(),
+                    new MqttClientSubscribeOptionsBuilder()
+                        .WithTopicFilter(_options.TriggerTopic)
+                        .WithTopicFilter(EmbeddingsChanged.Topic)
+                        .Build(),
                     stoppingToken);
+                // Etter (re)tilkobling kan endringer ha gått tapt, så indeksen lastes på nytt.
+                _reload.Request();
                 await PublishDiscoveryAsync(stoppingToken);
                 await PublishAsync(_options.StatusTopic, "online", retain: true, stoppingToken);
                 _logger.LogInformation("Tilkoblet MQTT {Host}:{Port}, venter på trigger.", _options.Host, _options.Port);

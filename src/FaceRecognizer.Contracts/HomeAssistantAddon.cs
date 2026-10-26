@@ -3,7 +3,9 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 
-namespace FaceRecognizer.Recognition.Configuration;
+using Microsoft.Extensions.Configuration;
+
+namespace FaceRecognizer.Contracts;
 
 /// <summary>Støtte for å kjøre som Home Assistant-app: innstillinger og MQTT-tilkobling fra Supervisor.</summary>
 public static class HomeAssistantAddon
@@ -11,8 +13,33 @@ public static class HomeAssistantAddon
     /// <summary>Plassering av innstillingene brukeren har satt i HA.</summary>
     public const string OptionsPath = "/data/options.json";
 
-    /// <summary>Mappe i app-ens vedvarende konfigurasjon (addon_config) for referansebilder.</summary>
-    public const string FacesFolder = "/config/faces";
+    /// <summary>
+    /// Leser innstillingene fra <see cref="OptionsPath"/> når tjenesten kjører som HA-app. Gjør ingenting ellers.
+    /// </summary>
+    /// <param name="configuration">Konfigurasjonen som utvides.</param>
+    /// <param name="useMqttService">Hent MQTT-tilkobling fra Supervisor når den ikke er satt i innstillingene.</param>
+    /// <param name="cancellationToken">Avbruddstoken.</param>
+    public static async Task AddHomeAssistantOptionsAsync(
+        this IConfigurationBuilder configuration, bool useMqttService, CancellationToken cancellationToken = default)
+    {
+        if (!File.Exists(OptionsPath))
+        {
+            return;
+        }
+
+        var settings = FlattenOptions(await File.ReadAllTextAsync(OptionsPath, cancellationToken));
+        var supervisorToken = Environment.GetEnvironmentVariable("SUPERVISOR_TOKEN");
+        if (useMqttService && !settings.ContainsKey("Mqtt:Host") && !string.IsNullOrEmpty(supervisorToken))
+        {
+            using var http = new HttpClient();
+            foreach (var (key, value) in await GetMqttServiceAsync(http, supervisorToken, cancellationToken))
+            {
+                settings[key] = value;
+            }
+        }
+
+        configuration.AddInMemoryCollection(settings);
+    }
 
     /// <summary>
     /// Gjør om options.json (snake_case) til konfigurasjonsnøkler (<c>Camera:BaseUrl</c>).

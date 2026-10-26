@@ -5,18 +5,25 @@ namespace FaceRecognizer.Recognition.Engines;
 /// <param name="PersonName">Beste match (person-ID), <c>null</c> hvis ukjent.</param>
 /// <param name="Score">Beste likhet (0-1) mot registrerte personer.</param>
 /// <param name="IsMatch">Om scoren oppfyller terskelen.</param>
-public sealed record FaceMatchResult(bool FaceFound, string? PersonName, float Score, bool IsMatch);
+/// <param name="PersonId">Unik ID for matchet person, <c>null</c> hvis ukjent.</param>
+public sealed record FaceMatchResult(
+    bool FaceFound, string? PersonName, float Score, bool IsMatch, Guid? PersonId = null);
 
-/// <summary>Utskiftbar ansiktsmotor for deteksjon, registrering og gjenkjenning.</summary>
+/// <summary>Utskiftbar ansiktsmotor for deteksjon, embedding og gjenkjenning. Registrering av personer hører ikke hjemme her.</summary>
 public interface IFaceRecognitionProvider
 {
     /// <summary>Navn på motoren, f.eks. <c>FaceAiSharp</c> eller <c>DeepFace</c>.</summary>
     string Name { get; }
 
-    /// <summary>Antall registrerte referanseansikter som er lastet.</summary>
+    /// <summary>
+    /// Modellversjon (motor, modell og detektor). Lagrede embeddings brukes kun når de er laget med samme versjon.
+    /// </summary>
+    string ModelId { get; }
+
+    /// <summary>Antall registrerte referanseansikter som er lastet i minneindeksen.</summary>
     int ReferenceCount { get; }
 
-    /// <summary>Laster registrerte personer fra det lokale referanselageret.</summary>
+    /// <summary>Laster embeddings fra embeddingkilden til minneindeksen (erstatter innholdet).</summary>
     /// <param name="cancellationToken">Avbruddstoken.</param>
     Task LoadReferencesAsync(CancellationToken cancellationToken = default);
 
@@ -25,14 +32,10 @@ public interface IFaceRecognitionProvider
     /// <param name="cancellationToken">Avbruddstoken.</param>
     Task<int> DetectFacesAsync(byte[] image, CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Registrerer en kjent person med ett bilde og lagrer det varig. Kall flere ganger for flere bilder.
-    /// </summary>
-    /// <param name="personId">Person-ID (bokstaver, tall, mellomrom, understrek og bindestrek).</param>
-    /// <param name="image">Bilde med nøyaktig ett ansikt.</param>
+    /// <summary>Lager normaliserte embeddings for alle ansikter i bildet, største ansikt først.</summary>
+    /// <param name="image">Bilde (JPEG/PNG).</param>
     /// <param name="cancellationToken">Avbruddstoken.</param>
-    /// <exception cref="ArgumentException">Ugyldig person-ID, eller bildet har ikke nøyaktig ett ansikt.</exception>
-    Task RegisterAsync(string personId, byte[] image, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<float[]>> EmbedAsync(byte[] image, CancellationToken cancellationToken = default);
 
     /// <summary>Gjenkjenner alle ansikter i bildet, største ansikt først. Tom liste betyr ingen ansikter.</summary>
     /// <param name="image">Bilde (JPEG/PNG).</param>

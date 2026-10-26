@@ -1,0 +1,44 @@
+name: Face Admin
+version: "0.1.0"
+slug: face_admin
+description: Administrasjons-API for personer og referansebilder i Face Recognizer.
+# Ferdigbygd image (se .github/workflows/publish-addons.yml). Taggen er versjonen over.
+image: ghcr.io/da9el-pettersen/facerecognizer-admin
+arch:
+  - amd64
+  - aarch64
+startup: application
+boot: auto
+init: false
+# Åpnes i HA-sidepanelet via ingress. HA-brukeren stoles på (kun fra Supervisor 172.30.32.2), uten ADMIN_TOKEN.
+ingress: true
+ingress_port: 8080
+panel_icon: mdi:face-recognition
+panel_title: Face Admin
+# Kun HA-administratorer ser panelet. Sett admin.allowed_users for å begrense hvem som faktisk slippes inn.
+panel_admin: true
+# Port 8080 er av som standard. Slå på under Nettverk for å nå UI/API direkte fra LAN.
+ports:
+  8080/tcp: null
+ports_description:
+  8080/tcp: Administrasjons-API (krever Bearer-token)
+options:
+  admin:
+    token: ""
+    allowed_users: ""
+  database:
+    base_url: "http://local-face-database:8080"
+    token: ""
+  recognition:
+    base_url: "http://local-face-recognizer:8099"
+    token: ""
+schema:
+  admin:
+    token: password?
+    allowed_users: str?
+  database:
+    base_url: url
+    token: password
+  recognition:
+    base_url: url
+    token: password

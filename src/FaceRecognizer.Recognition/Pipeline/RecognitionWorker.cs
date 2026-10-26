@@ -147,7 +147,8 @@ public sealed class RecognitionWorker : BackgroundService
 
         var outcome = liveness is { IsLive: true } ? RecognitionOutcome.Verified : RecognitionOutcome.LivenessFailed;
         return new RecognitionResult(
-            outcome, match.PersonName, match.Score, now, liveness?.Score ?? 0f, camera, faces.Count, provider);
+            outcome, match.PersonName, match.Score, now, liveness?.Score ?? 0f, camera, faces.Count, provider,
+            match.PersonId);
     }
 
     private async Task<LivenessResult> CheckInfraredLivenessAsync(CancellationToken cancellationToken)

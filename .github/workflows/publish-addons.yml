@@ -1,0 +1,41 @@
+name: Publiser add-on-images
+
+# Bygger Database- og Admin-image for HA-appene i addons/. Kjør ved tag, f.eks. v0.1.0 (må samsvare med version i config.yaml).
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - name: database
+            dockerfile: src/FaceRecognizer.Database/Dockerfile
+          - name: admin
+            dockerfile: src/FaceRecognizer.Admin/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Les versjon fra config.yaml
+        id: version
+        run: echo "value=$(grep -m1 '^version:' addons/${{ matrix.name }}/config.yaml | tr -d '\"' | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/facerecognizer-${{ matrix.name }}:${{ steps.version.outputs.value }}
