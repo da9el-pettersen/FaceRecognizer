@@ -83,7 +83,7 @@ Alt gjøres i HA-nettgrensesnittet. Appene hentes direkte fra GitHub (repoet må
 | App | Innstilling | Verdi |
 |---|---|---|
 | DeepFace | `auth_token` | `DEEPFACE_AUTH_TOKEN` |
-| Face Database | `token` | `DATABASE_TOKEN` |
+| Face Database | `database.token` | `DATABASE_TOKEN` |
 | Face Recognizer | `deepface.auth_token` / `database.token` / `api.token` | `DEEPFACE_AUTH_TOKEN` / `DATABASE_TOKEN` / `RECOGNITION_API_TOKEN` |
 | Face Admin | `database.token` / `recognition.token` | `DATABASE_TOKEN` / `RECOGNITION_API_TOKEN` |
 
@@ -93,7 +93,7 @@ Alt gjøres i HA-nettgrensesnittet. Appene hentes direkte fra GitHub (repoet må
 5. **Start-rekkefølge:** Mosquitto, Face Database, DeepFace, Face Recognizer, Face Admin. Recognition prøver på nytt hvert 10. sekund til Database svarer.
 6. **Bruk Admin:** «Face Admin» dukker opp i HA-sidepanelet (ingress). HA-brukeren stoles på (kun når kallet kommer fra Supervisor `172.30.32.2` med `X-Remote-User-Id`), så ingen ekstra innlogging. Sett `admin.allowed_users` (HA-brukernavn eller bruker-ID, kommaseparert) for å begrense hvem som slippes inn; tom = alle innloggede HA-brukere (`panel_admin: true` skjuler i tillegg panelet for ikke-administratorer, men håndhever ikke). Endringer logges med brukernavn. Direkte kall (port 8080 på LAN, `enroll`, skript) krever `Authorization: Bearer <ADMIN_TOKEN>`; `admin.token` er valgfritt når du bare bruker ingress.
 7. **Eldre bilder:** legg dem i Face Database sin konfigurasjonsmappe (`/addon_configs/<slug>_face_database/faces/<navn>/`), sett
-   `legacy_import_folder` til `/config/faces`, start om, og kjør `POST /api/reindex`.
+   `database.legacy_import_folder` til `/config/faces`, start om, og kjør `POST /api/reindex`.
 
 Databasen ligger i appens `/data` og tas med i HA-backup.
 ## Lokal test (Docker Compose, uten HAOS)
