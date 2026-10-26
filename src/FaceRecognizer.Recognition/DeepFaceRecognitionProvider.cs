@@ -24,7 +24,7 @@ public sealed class DeepFaceOptions
     public float Threshold { get; set; } = 0.5f;
 
     /// <summary>Minste deteksjonssikkerhet (0-1) for at et ansikt telles.</summary>
-    public float MinFaceConfidence { get; set; } = 0.9f;
+    public float MinFaceConfidence { get; set; } = 0.7f;
 
     /// <summary>Maks antall ansikter per bilde.</summary>
     public int MaxFaces { get; set; } = 5;

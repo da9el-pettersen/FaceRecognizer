@@ -6,6 +6,8 @@ ENV DEEPFACE_HOME=/opt/deepface
 # Kun modellene vi har bakt inn forhåndslastes (containeren har ikke internett).
 ENV DEEPFACE_FACE_RECOGNITION_MODELS=SFace
 ENV DEEPFACE_FACE_DETECTION_MODELS=yunet
+# Standard 0.9 er for streng: ansikter på dørkamera (liten andel av 4K-bildet, IR) scorer ofte 0.90-0.93.
+ENV yunet_score_threshold=0.6
 
 # SFace (gjenkjenning, Apache-2.0) og YuNet (ansiktsdeteksjon, MIT), begge fra OpenCV Zoo.
 ADD --checksum=sha256:0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79 \

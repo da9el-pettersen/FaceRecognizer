@@ -8,6 +8,8 @@ namespace FaceRecognizer.Recognition;
 /// </summary>
 public static class Enroll
 {
+    private const int MaxAttempts = 6;
+
     private static readonly string[] Instructions =
     [
         "Se rett inn i kameraet",
@@ -108,17 +110,27 @@ public static class Enroll
         }
 
         Console.WriteLine();
-        var image = await camera.GetSnapshotAsync(ct);
-        try
+        byte[]? last = null;
+        for (var attempt = 1; attempt <= MaxAttempts; attempt++)
         {
-            await provider.RegisterAsync(personId, image, ct);
-            Console.WriteLine("  OK: lagret");
-            return true;
+            last = await camera.GetSnapshotAsync(ct);
+            try
+            {
+                await provider.RegisterAsync(personId, last, ct);
+                Console.WriteLine($"  OK: lagret (forsøk {attempt})");
+                return true;
+            }
+            catch (ArgumentException)
+            {
+                Console.WriteLine($"  forsøk {attempt}/{MaxAttempts}: ikke nøyaktig ett ansikt funnet, prøver igjen...");
+                await Task.Delay(TimeSpan.FromSeconds(1), ct);
+            }
         }
-        catch (ArgumentException ex)
-        {
-            Console.WriteLine($"  Hoppet over: {ex.Message}");
-            return false;
-        }
+
+        var rejectedPath = Path.Combine(Environment.GetEnvironmentVariable("SELFTEST_OUTPUT") ?? "/data/selftest", "enroll-avvist.jpg");
+        Directory.CreateDirectory(Path.GetDirectoryName(rejectedPath)!);
+        await File.WriteAllBytesAsync(rejectedPath, last!, ct);
+        Console.WriteLine($"  Hoppet over. Siste avviste bilde lagret i {rejectedPath}");
+        return false;
     }
 }
