@@ -3,7 +3,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 
-namespace FaceRecognizer.Recognition;
+namespace FaceRecognizer.Recognition.Configuration;
 
 /// <summary>Støtte for å kjøre som Home Assistant-app: innstillinger og MQTT-tilkobling fra Supervisor.</summary>
 public static class HomeAssistantAddon

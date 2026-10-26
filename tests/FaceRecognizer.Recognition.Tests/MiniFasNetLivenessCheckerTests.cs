@@ -1,3 +1,5 @@
+using FaceRecognizer.Recognition.Liveness;
+
 namespace FaceRecognizer.Recognition.Tests;
 
 public class MiniFasNetLivenessCheckerTests

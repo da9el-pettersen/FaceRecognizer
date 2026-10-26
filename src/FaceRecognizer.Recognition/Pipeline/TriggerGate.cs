@@ -1,4 +1,4 @@
-namespace FaceRecognizer.Recognition;
+namespace FaceRecognizer.Recognition.Pipeline;
 
 /// <summary>
 /// Slipper bare én trigger inn om gangen. Mens en behandling pågår, og i en kort pause etterpå,

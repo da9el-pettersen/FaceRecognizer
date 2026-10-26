@@ -8,7 +8,7 @@ using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 
-namespace FaceRecognizer.Recognition;
+namespace FaceRecognizer.Recognition.Liveness;
 
 /// <summary>
 /// Liveness med MiniFASNetV2 og MiniFASNetV1SE (Silent-Face-Anti-Spoofing) via ONNX Runtime.

@@ -4,6 +4,9 @@ using System.Text.Json;
 using FaceRecognizer.Contracts;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using FaceRecognizer.Recognition.Engines;
+using FaceRecognizer.Recognition.Liveness;
+using FaceRecognizer.Recognition.Pipeline;
 
 namespace FaceRecognizer.Recognition.Tests;
 

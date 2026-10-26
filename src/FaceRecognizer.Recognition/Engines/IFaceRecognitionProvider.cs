@@ -1,4 +1,4 @@
-namespace FaceRecognizer.Recognition;
+namespace FaceRecognizer.Recognition.Engines;
 
 /// <summary>Resultatet av gjenkjenning for ett ansikt i et bilde.</summary>
 /// <param name="FaceFound">Om et ansikt ble funnet.</param>

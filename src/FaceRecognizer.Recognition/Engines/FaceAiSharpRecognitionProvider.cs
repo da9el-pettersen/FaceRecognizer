@@ -3,7 +3,7 @@ using FaceAiSharp.Extensions;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 
-namespace FaceRecognizer.Recognition;
+namespace FaceRecognizer.Recognition.Engines;
 
 /// <summary>Innstillinger for ansiktsmatching.</summary>
 public sealed class FaceMatchOptions

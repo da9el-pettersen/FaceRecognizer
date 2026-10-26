@@ -3,8 +3,10 @@ using System.Threading.Channels;
 using FaceRecognizer.Contracts;
 using Microsoft.Extensions.Options;
 using MQTTnet;
+using FaceRecognizer.Recognition.Pipeline;
+using FaceRecognizer.Recognition.Configuration;
 
-namespace FaceRecognizer.Recognition;
+namespace FaceRecognizer.Recognition.Messaging;
 
 /// <summary>
 /// MQTT-forbindelse mot Home Assistant: lytter på trigger, publiserer resultat og MQTT Discovery.

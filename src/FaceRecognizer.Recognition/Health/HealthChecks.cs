@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using FaceRecognizer.Recognition.Engines;
+using FaceRecognizer.Recognition.Messaging;
 
-namespace FaceRecognizer.Recognition;
+namespace FaceRecognizer.Recognition.Health;
 
 /// <summary>Helsesjekk for MQTT-forbindelsen.</summary>
 public sealed class MqttHealthCheck(MqttGateway gateway) : IHealthCheck

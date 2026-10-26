@@ -1,6 +1,9 @@
 using Microsoft.Extensions.Options;
+using FaceRecognizer.Recognition.Engines;
+using FaceRecognizer.Recognition.Camera;
+using FaceRecognizer.Recognition.Configuration;
 
-namespace FaceRecognizer.Recognition;
+namespace FaceRecognizer.Recognition.Tools;
 
 /// <summary>
 /// Registrerer en person fra kameraet: <c>enroll &lt;person-ID&gt; [--count N] [--ir]</c>.

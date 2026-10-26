@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 
-namespace FaceRecognizer.Recognition;
+namespace FaceRecognizer.Recognition.Engines;
 
 /// <summary>
 /// Lokalt, varig referanselager: <c>&lt;mappe&gt;/&lt;person-ID&gt;/&lt;bilde&gt;</c>.

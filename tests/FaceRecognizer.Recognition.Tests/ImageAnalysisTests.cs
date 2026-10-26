@@ -1,5 +1,6 @@
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
+using FaceRecognizer.Recognition.Liveness;
 
 namespace FaceRecognizer.Recognition.Tests;
 

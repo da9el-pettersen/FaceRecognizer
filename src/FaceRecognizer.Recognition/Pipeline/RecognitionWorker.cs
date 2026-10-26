@@ -1,8 +1,13 @@
 using System.Threading.Channels;
 using FaceRecognizer.Contracts;
 using Microsoft.Extensions.Options;
+using FaceRecognizer.Recognition.Engines;
+using FaceRecognizer.Recognition.Liveness;
+using FaceRecognizer.Recognition.Camera;
+using FaceRecognizer.Recognition.Messaging;
+using FaceRecognizer.Recognition.Configuration;
 
-namespace FaceRecognizer.Recognition;
+namespace FaceRecognizer.Recognition.Pipeline;
 
 /// <summary>
 /// Venter på triggere og kjører flyten: snapshot, match, IR, liveness, publisering.

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using FaceRecognizer.Contracts;
+using FaceRecognizer.Recognition.Camera;
 
 namespace FaceRecognizer.Recognition.Tests;
 

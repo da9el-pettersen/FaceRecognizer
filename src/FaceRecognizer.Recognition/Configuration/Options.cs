@@ -1,4 +1,4 @@
-namespace FaceRecognizer.Recognition;
+namespace FaceRecognizer.Recognition.Configuration;
 
 /// <summary>Innstillinger for MQTT-brokeren (Mosquitto i HAOS).</summary>
 public sealed class MqttOptions

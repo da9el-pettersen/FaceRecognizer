@@ -1,6 +1,10 @@
 using Microsoft.Extensions.Options;
+using FaceRecognizer.Recognition.Engines;
+using FaceRecognizer.Recognition.Liveness;
+using FaceRecognizer.Recognition.Camera;
+using FaceRecognizer.Recognition.Configuration;
 
-namespace FaceRecognizer.Recognition;
+namespace FaceRecognizer.Recognition.Tools;
 
 /// <summary>
 /// Lokal selvtest uten MQTT/Home Assistant: <c>selftest [--ir]</c>. Tester kamerakontakt (sertifikat-pinning og innlogging),

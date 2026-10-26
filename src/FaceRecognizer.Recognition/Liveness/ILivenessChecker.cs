@@ -1,4 +1,4 @@
-namespace FaceRecognizer.Recognition;
+namespace FaceRecognizer.Recognition.Liveness;
 
 /// <summary>Resultatet av en liveness-vurdering.</summary>
 /// <param name="IsLive">Om liveness er positivt bekreftet.</param>

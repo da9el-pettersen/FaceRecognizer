@@ -3,7 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Options;
 
-namespace FaceRecognizer.Recognition;
+namespace FaceRecognizer.Recognition.Engines;
 
 /// <summary>Innstillinger for DeepFace REST API.</summary>
 public sealed class DeepFaceOptions

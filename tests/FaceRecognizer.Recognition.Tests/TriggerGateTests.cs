@@ -1,3 +1,5 @@
+using FaceRecognizer.Recognition.Pipeline;
+
 namespace FaceRecognizer.Recognition.Tests;
 
 public class TriggerGateTests

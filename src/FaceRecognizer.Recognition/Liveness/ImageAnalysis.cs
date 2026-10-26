@@ -1,7 +1,7 @@
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 
-namespace FaceRecognizer.Recognition;
+namespace FaceRecognizer.Recognition.Liveness;
 
 /// <summary>Enkel bildeanalyse for å avgjøre om kameraet leverer IR (svart/hvitt).</summary>
 public static class ImageAnalysis

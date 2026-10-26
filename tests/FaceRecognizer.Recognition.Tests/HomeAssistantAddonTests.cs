@@ -1,4 +1,5 @@
 using FaceRecognizer.Recognition;
+using FaceRecognizer.Recognition.Configuration;
 
 namespace FaceRecognizer.Recognition.Tests;
 

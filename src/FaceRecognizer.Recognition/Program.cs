@@ -1,8 +1,15 @@
 using System.Threading.Channels;
 using FaceAiSharp;
-using FaceRecognizer.Recognition;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
+using FaceRecognizer.Recognition.Engines;
+using FaceRecognizer.Recognition.Liveness;
+using FaceRecognizer.Recognition.Camera;
+using FaceRecognizer.Recognition.Messaging;
+using FaceRecognizer.Recognition.Pipeline;
+using FaceRecognizer.Recognition.Configuration;
+using FaceRecognizer.Recognition.Health;
+using FaceRecognizer.Recognition.Tools;
 
 var builder = Host.CreateApplicationBuilder(args);
 

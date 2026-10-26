@@ -2,8 +2,9 @@ using System.Net.Http.Json;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Options;
+using FaceRecognizer.Recognition.Configuration;
 
-namespace FaceRecognizer.Recognition;
+namespace FaceRecognizer.Recognition.Camera;
 
 /// <summary>Klient mot Reolink HTTP-API med sertifikat-pinning.</summary>
 public sealed class ReolinkCamera
