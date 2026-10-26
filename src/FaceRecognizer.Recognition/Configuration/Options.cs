@@ -22,7 +22,7 @@ public sealed class MqttOptions
     public string TriggerTopic { get; set; } = "facerecognizer/trigger";
 
     /// <summary>Topic som resultatet publiseres på.</summary>
-    public string ResultTopic { get; set; } = FaceRecognizer.Contracts.RecognitionResult.Topic;
+    public string ResultTopic { get; set; } = Contracts.RecognitionResult.Topic;
 
     /// <summary>Topic for tilgjengelighet (online/offline).</summary>
     public string StatusTopic { get; set; } = "facerecognizer/status";
