@@ -25,7 +25,7 @@ services:
       Camera__Password: ${CAMERA_PASSWORD:-}
       Camera__CertificateSha256: ${CAMERA_CERT_SHA256:-}
     volumes:
-      - faces:/data/faces
+      - ./faces:/data/faces
       - ./selftest-out:/data/selftest
     networks: [internal, lan]
 
@@ -52,8 +52,6 @@ services:
       - ./deploy/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
     networks: [internal]
 
-volumes:
-  faces:
 
 networks:
   # internal: true gir ingen vei ut til internett. DeepFace og Mosquitto ligger kun her.

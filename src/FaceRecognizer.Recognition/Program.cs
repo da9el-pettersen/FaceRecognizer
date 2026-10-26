@@ -104,5 +104,10 @@ if (args.Contains("selftest"))
     return await SelfTest.RunAsync(builder.Build().Services, args);
 }
 
+if (args.Contains("enroll"))
+{
+    return await Enroll.RunAsync(builder.Build().Services, args);
+}
+
 builder.Build().Run();
 return 0;

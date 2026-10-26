@@ -30,9 +30,16 @@ Flere ansikter: største ansikt vurderes, `faceCount` publiseres (automasjonen k
 - `/register` og `/search` brukes ikke (krever database). Registrerte personer lagres i stedet lokalt (se under).
 
 ### Registrere personer
-Legg ett eller flere bilder per person i `faces/<person-id>/*.jpg` (volum `faces`, `/data/faces`; på HAOS
+Legg ett eller flere bilder per person i `faces/<person-id>/*.jpg` (Compose monterer `./faces` som `/data/faces`; på HAOS
 `/addon_configs/<slug>_face_recognizer/faces/`). Bildet skal ha ett tydelig ansikt. Lastes ved oppstart og
 embeddings beregnes på nytt (bildene er den varige lagringen, så alt overlever restart).
+Ta bildene med kameraet (stå foran det; 4 s nedtelling mellom hvert bilde, 5-8 bilder anbefales):
+
+```
+docker compose run --rm recognition enroll <person-id> [--count 6] [--ir]
+```
+
+Bilder uten nøyaktig ett ansikt hoppes over. `--ir` tar i tillegg 2 IR-bilder.
 I kode: `IFaceRecognitionProvider.RegisterAsync(personId, bytes)` lagrer bildet og aktiverer personen umiddelbart.
 
 ## Lokal test (Docker Compose, uten HAOS)
