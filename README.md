@@ -105,8 +105,8 @@ kameraet, og `admin` for å publisere port 8080.
 ### 1. Test kamerakontakt (anbefalt første steg)
 1. Finn kameraets sertifikat-fingeravtrykk (kun TLS-handshake, ingen innlogging):
    ```powershell
-   $c=New-Object Net.Sockets.TcpClient('kamera.local',443); $s=New-Object Net.Security.SslStream($c.GetStream(),$false,({$true}))
-   $s.AuthenticateAsClient('kamera.local'); ([Security.Cryptography.X509Certificates.X509Certificate2]$s.RemoteCertificate).GetCertHashString('SHA256')
+   $kamera='<kamera-adresse>'; $c=New-Object Net.Sockets.TcpClient($kamera,443); $s=New-Object Net.Security.SslStream($c.GetStream(),$false,({$true}))
+   $s.AuthenticateAsClient($kamera); ([Security.Cryptography.X509Certificates.X509Certificate2]$s.RemoteCertificate).GetCertHashString('SHA256')
    ```
    Kameraet til dette prosjektet ga `D0F5937FDF67BB73F342B5ABD108BC33843EE55AF3641A48A83C453A7B884D40`
    (selvsignert Reolink-sertifikat). Sett i `CAMERA_CERT_SHA256`. Feil verdi avvises, og tom verdi avviser alt.

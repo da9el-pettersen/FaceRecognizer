@@ -37,7 +37,7 @@ public sealed class CameraOptions
     /// <summary>Navn på kameraet, tas med i publiserte resultater.</summary>
     public string Name { get; set; } = "reolink";
 
-    /// <summary>Adresse til kameraet, f.eks. https://kamera.local.</summary>
+    /// <summary>Adresse til kameraet, f.eks. https://<kamera-adresse>.</summary>
     public string BaseUrl { get; set; } = "";
 
     /// <summary>Kamerabruker.</summary>
