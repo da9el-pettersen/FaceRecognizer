@@ -11,7 +11,7 @@ Selve låsehandlingen gjøres av en HA-automasjon (se `ha/automations.example.ya
 - **deepface.base_url / auth_token / model_name / threshold**: DeepFace-appen (`http://def5d25e-deepface:5000`), samme token som i DeepFace-appen, modell SFace, minste cosinus-likhet (standard 0,5).
 - **camera.name**: navn som tas med i resultatet.
 - **liveness.min_score**: minste gjennomsnittlige «ekte»-score fra liveness-modellene (standard 0,8). Må kalibreres.
-- **mqtt.***: valgfritt. Utelatt = MQTT-tilkobling hentes automatisk fra Mosquitto-appen.
+- MQTT: tilkoblingen hentes automatisk fra Mosquitto-appen (ingen innstillinger).
 
 ## Referansebilder
 Personer og referansebilder administreres i Admin-tjenesten og lagres i Database-tjenesten (egne images, se README).
