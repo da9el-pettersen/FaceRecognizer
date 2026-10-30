@@ -81,4 +81,10 @@ public sealed class PipelineOptions
 {
     /// <summary>Minste tid mellom to behandlinger, for å unngå gjentatte triggere.</summary>
     public TimeSpan Cooldown { get; set; } = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// Antall forsøk (med nye bilder) når en person er gjenkjent, men liveness feiler.
+    /// Etter siste forsøk publiseres LivenessFailed og tjenesten går tilbake til vanlig gjenkjenning.
+    /// </summary>
+    public int LivenessAttempts { get; set; } = 4;
 }

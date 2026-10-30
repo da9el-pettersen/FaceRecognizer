@@ -100,6 +100,43 @@ public sealed class RecognitionWorker : BackgroundService
 
     private async Task<RecognitionResult> EvaluateAsync(CancellationToken cancellationToken)
     {
+        var first = await EvaluateOnceAsync(cancellationToken);
+        return await RetryLivenessAsync(
+            first, _options.LivenessAttempts, () => EvaluateOnceAsync(cancellationToken), cancellationToken);
+    }
+
+    /// <summary>
+    /// Når en person er gjenkjent, men liveness feilet, prøves nye bilder til samme person er bekreftet
+    /// eller <paramref name="attempts"/> forsøk er brukt. Andre utfall i forsøkene teller som mislykket forsøk.
+    /// </summary>
+    /// <param name="first">Resultatet av første forsøk.</param>
+    /// <param name="attempts">Totalt antall forsøk, inkludert det første.</param>
+    /// <param name="evaluate">Tar nytt bilde og vurderer det.</param>
+    /// <param name="cancellationToken">Avbruddstoken.</param>
+    internal static async Task<RecognitionResult> RetryLivenessAsync(
+        RecognitionResult first, int attempts, Func<Task<RecognitionResult>> evaluate,
+        CancellationToken cancellationToken = default)
+    {
+        if (first.Outcome != RecognitionOutcome.LivenessFailed)
+        {
+            return first;
+        }
+
+        for (var attempt = 1; attempt < attempts; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var next = await evaluate();
+            if (next.Outcome == RecognitionOutcome.Verified && next.PersonId == first.PersonId)
+            {
+                return next;
+            }
+        }
+
+        return first;
+    }
+
+    private async Task<RecognitionResult> EvaluateOnceAsync(CancellationToken cancellationToken)
+    {
         var snapshot = await _camera.GetSnapshotAsync(cancellationToken);
 
         if (ImageAnalysis.IsGrayscale(snapshot))
