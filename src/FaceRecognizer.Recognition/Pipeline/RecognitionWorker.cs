@@ -85,7 +85,9 @@ public sealed class RecognitionWorker : BackgroundService
             try
             {
                 await _gateway.PublishResultAsync(result, stoppingToken);
-                _logger.LogInformation("Resultat: {Outcome} ({Score:P2})", result.Outcome, result.Score);
+                _logger.LogInformation(
+                    "Resultat: {Outcome} (match {Score:P2}, liveness {Liveness:P2})",
+                    result.Outcome, result.Score, result.LivenessScore);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
