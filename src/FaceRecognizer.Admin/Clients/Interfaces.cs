@@ -17,6 +17,9 @@ public interface IDatabaseClient
     /// <summary>Sletter en person med alle bilder og embeddings. Returnerer <c>false</c> hvis den ikke finnes.</summary>
     Task<bool> DeletePersonAsync(Guid personId, CancellationToken cancellationToken);
 
+    /// <summary>Setter (eller fjerner med <c>null</c>) koblingen til en HA person-entitet. Returnerer <c>false</c> hvis personen ikke finnes.</summary>
+    Task<bool> SetPersonEntityAsync(Guid personId, string? entityId, CancellationToken cancellationToken);
+
     /// <summary>Lister embeddings for en person og modell.</summary>
     Task<IReadOnlyList<PersonEmbeddingDto>> ListPersonEmbeddingsAsync(
         Guid personId, string modelId, CancellationToken cancellationToken);

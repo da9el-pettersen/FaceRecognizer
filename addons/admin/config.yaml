@@ -1,5 +1,5 @@
 name: Face Admin
-version: "0.1.0"
+version: "0.2.0"
 slug: face_admin
 description: Administrasjons-API for personer og referansebilder i Face Recognizer.
 # Ferdigbygd image (se .github/workflows/publish-addons.yml). Taggen er versjonen over.

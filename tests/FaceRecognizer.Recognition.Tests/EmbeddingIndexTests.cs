@@ -109,6 +109,16 @@ public sealed class EmbeddingIndexTests
     }
 
     [Fact]
+    public void Match_returnerer_koblet_HA_entitet_kun_ved_treff()
+    {
+        var service = CreateService();
+        service.Index.Add(Guid.NewGuid(), "Ola", 1, Unit(1, 0, 0), "person.ola");
+
+        Assert.Equal("person.ola", service.Match(Unit(1, 0.1f, 0), 0.5f).PersonEntityId);
+        Assert.Null(service.Match(Unit(0, 1, 0), 0.5f).PersonEntityId);
+    }
+
+    [Fact]
     public void Match_EmptyIndex_ReturnsUnknown()
     {
         var result = CreateService().Match(Unit(1, 0), 0.5f);

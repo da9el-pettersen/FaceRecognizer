@@ -52,21 +52,38 @@ public sealed class EmbeddingStore
         await using var connection = await OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT p.id, p.name, COUNT(e.id)
+            SELECT p.id, p.name, COUNT(e.id), p.ha_person_entity
             FROM persons p
             LEFT JOIN images i ON i.person_id = p.id
             LEFT JOIN embeddings e ON e.image_id = i.id AND e.model_id = $model
-            GROUP BY p.id, p.name ORDER BY p.name
+            GROUP BY p.id, p.name, p.ha_person_entity ORDER BY p.name
             """;
         command.Parameters.AddWithValue("$model", modelId);
         var result = new List<PersonSummaryDto>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
-            result.Add(new PersonSummaryDto(Guid.Parse(reader.GetString(0)), reader.GetString(1), reader.GetInt32(2)));
+            result.Add(new PersonSummaryDto(
+                Guid.Parse(reader.GetString(0)), reader.GetString(1), reader.GetInt32(2),
+                reader.IsDBNull(3) ? null : reader.GetString(3)));
         }
 
         return result;
+    }
+
+    /// <summary>Setter eller fjerner koblingen til en Home Assistant person-entitet.</summary>
+    /// <param name="personId">Person-ID.</param>
+    /// <param name="entityId">Entitets-ID, eller <c>null</c> for å fjerne koblingen.</param>
+    /// <param name="cancellationToken">Avbruddstoken.</param>
+    /// <returns><c>false</c> hvis personen ikke finnes.</returns>
+    public async Task<bool> SetPersonEntityAsync(Guid personId, string? entityId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE persons SET ha_person_entity = $entity WHERE id = $id";
+        command.Parameters.AddWithValue("$entity", (object?)entityId ?? DBNull.Value);
+        command.Parameters.AddWithValue("$id", personId.ToString());
+        return await command.ExecuteNonQueryAsync(cancellationToken) > 0;
     }
 
     /// <summary>Sletter en person med alle bilder og embeddings.</summary>
@@ -226,7 +243,7 @@ public sealed class EmbeddingStore
         await using var connection = await OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT e.id, p.id, p.name, e.dimension, e.vector
+            SELECT e.id, p.id, p.name, e.dimension, e.vector, p.ha_person_entity
             FROM embeddings e JOIN images i ON i.id = e.image_id JOIN persons p ON p.id = i.person_id
             WHERE e.model_id = $model ORDER BY e.id
             """;
@@ -242,7 +259,7 @@ public sealed class EmbeddingStore
                 {
                     result.Add(new EmbeddingDto(
                         reader.GetInt64(0), Guid.Parse(reader.GetString(1)), reader.GetString(2),
-                        MemoryMarshal.Cast<byte, float>(blob).ToArray()));
+                        MemoryMarshal.Cast<byte, float>(blob).ToArray(), reader.IsDBNull(5) ? null : reader.GetString(5)));
                 }
             }
         }
@@ -333,24 +350,23 @@ public sealed class EmbeddingStore
         SqliteConnection connection, Guid personId, CancellationToken cancellationToken)
     {
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT id, name FROM persons WHERE id = $id";
+        command.CommandText = "SELECT id, name, ha_person_entity FROM persons WHERE id = $id";
         command.Parameters.AddWithValue("$id", personId.ToString());
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        return await reader.ReadAsync(cancellationToken)
-            ? new PersonDto(Guid.Parse(reader.GetString(0)), reader.GetString(1))
-            : null;
+        return await reader.ReadAsync(cancellationToken) ? ReadPerson(reader) : null;
     }
+
+    private static PersonDto ReadPerson(SqliteDataReader reader) =>
+        new(Guid.Parse(reader.GetString(0)), reader.GetString(1), reader.IsDBNull(2) ? null : reader.GetString(2));
 
     private static async Task<PersonDto?> FindPersonByNameAsync(
         SqliteConnection connection, string name, CancellationToken cancellationToken)
     {
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT id, name FROM persons WHERE name = $name";
+        command.CommandText = "SELECT id, name, ha_person_entity FROM persons WHERE name = $name";
         command.Parameters.AddWithValue("$name", name);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        return await reader.ReadAsync(cancellationToken)
-            ? new PersonDto(Guid.Parse(reader.GetString(0)), reader.GetString(1))
-            : null;
+        return await reader.ReadAsync(cancellationToken) ? ReadPerson(reader) : null;
     }
 
     private static async Task<PersonDto> InsertPersonAsync(
@@ -425,6 +441,17 @@ public sealed class EmbeddingStore
                     UNIQUE (image_id, model_id));
                 """;
             await command.ExecuteNonQueryAsync(cancellationToken);
+
+            // Migrering: koblingen til Home Assistant person-entitet ble lagt til etter første utgivelse.
+            await using var columns = connection.CreateCommand();
+            columns.CommandText = "SELECT COUNT(*) FROM pragma_table_info('persons') WHERE name = 'ha_person_entity'";
+            if (Convert.ToInt32(await columns.ExecuteScalarAsync(cancellationToken)) == 0)
+            {
+                await using var migrate = connection.CreateCommand();
+                migrate.CommandText = "ALTER TABLE persons ADD COLUMN ha_person_entity TEXT";
+                await migrate.ExecuteNonQueryAsync(cancellationToken);
+            }
+
             _initialized = true;
         }
         finally

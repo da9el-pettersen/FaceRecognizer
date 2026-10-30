@@ -21,6 +21,46 @@ public sealed class EmbeddingStoreTests : IDisposable
     private EmbeddingStore CreateStore() => new(Path.Combine(_folder, "faces.db"));
 
     [Fact]
+    public async Task Person_entitet_lagres_og_følger_med_i_snapshot_og_kan_fjernes()
+    {
+        var store = CreateStore();
+        var person = (await store.TryCreatePersonAsync("Ola", default))!;
+        await store.AddImageAsync(person.PersonId, [1], Model, [1f, 0f], default);
+
+        Assert.True(await store.SetPersonEntityAsync(person.PersonId, "person.ola", default));
+        Assert.False(await store.SetPersonEntityAsync(Guid.NewGuid(), "person.x", default));
+
+        Assert.Equal("person.ola", (await CreateStore().GetPersonAsync(person.PersonId, default))!.HaPersonEntity);
+        Assert.Equal("person.ola", Assert.Single((await store.LoadSnapshotAsync(Model, default)).Embeddings).HaPersonEntity);
+        Assert.Equal("person.ola", Assert.Single(await store.ListPersonsAsync(Model, default)).HaPersonEntity);
+
+        await store.SetPersonEntityAsync(person.PersonId, null, default);
+        Assert.Null((await store.GetPersonAsync(person.PersonId, default))!.HaPersonEntity);
+    }
+
+    [Fact]
+    public async Task Eldre_database_uten_entitetskolonne_migreres()
+    {
+        Directory.CreateDirectory(_folder);
+        var path = Path.Combine(_folder, "faces.db");
+        await using (var old = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={path};Pooling=False"))
+        {
+            await old.OpenAsync();
+            await using var command = old.CreateCommand();
+            command.CommandText = """
+                CREATE TABLE persons (id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE, created_at TEXT NOT NULL);
+                INSERT INTO persons VALUES ('11111111-1111-1111-1111-111111111111', 'Gammel', '2024-01-01');
+                """;
+            await command.ExecuteNonQueryAsync();
+        }
+
+        var person = (await new EmbeddingStore(path).GetPersonAsync(Guid.Parse("11111111-1111-1111-1111-111111111111"), default))!;
+
+        Assert.Equal("Gammel", person.Name);
+        Assert.Null(person.HaPersonEntity);
+    }
+
+    [Fact]
     public async Task Embeddings_overlever_ny_instans_og_er_normalisert_lagret_uten_bildeanalyse()
     {
         var store = CreateStore();

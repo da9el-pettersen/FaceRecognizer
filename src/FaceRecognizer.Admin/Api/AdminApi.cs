@@ -105,6 +105,18 @@ public static class AdminApi
             Guid personId, long embeddingId, ReferenceService service, CancellationToken ct) =>
             await service.DeleteEmbeddingAsync(personId, embeddingId, ct) ? Results.NoContent() : Results.NotFound());
 
+        api.MapPut("/persons/{personId:guid}/entity", async (
+            Guid personId, SetPersonEntityRequest request, IDatabaseClient database, CancellationToken ct) =>
+        {
+            var entity = string.IsNullOrWhiteSpace(request.EntityId) ? null : request.EntityId.Trim();
+            if (entity is not null && !HaPersonEntities.IsValid(entity))
+            {
+                return Results.BadRequest("Ugyldig entitet. Bruk formatet person.navn.");
+            }
+
+            return await database.SetPersonEntityAsync(personId, entity, ct) ? Results.NoContent() : Results.NotFound();
+        });
+
         api.MapDelete("/persons/{personId:guid}", async (Guid personId, IDatabaseClient database, CancellationToken ct) =>
             await database.DeletePersonAsync(personId, ct) ? Results.NoContent() : Results.NotFound());
 

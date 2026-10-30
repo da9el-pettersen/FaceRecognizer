@@ -32,6 +32,7 @@ public enum RecognitionOutcome
 /// <param name="FaceCount">Antall ansikter funnet i bildet. Ved flere enn ett vurderes kun det største.</param>
 /// <param name="Provider">Ansiktsmotoren som ble brukt.</param>
 /// <param name="PersonId">Unik ID for matchet person, ellers <c>null</c>.</param>
+/// <param name="PersonEntityId">Home Assistant person-entitet koblet til matchet person (f.eks. <c>person.daniel</c>), ellers <c>null</c>.</param>
 public sealed record RecognitionResult(
     RecognitionOutcome Outcome,
     string? PersonName,
@@ -41,7 +42,8 @@ public sealed record RecognitionResult(
     string? CameraName = null,
     int FaceCount = 0,
     string? Provider = null,
-    Guid? PersonId = null)
+    Guid? PersonId = null,
+    string? PersonEntityId = null)
 {
     /// <summary>MQTT-topic resultatet publiseres på.</summary>
     public const string Topic = "facerecognizer/result";

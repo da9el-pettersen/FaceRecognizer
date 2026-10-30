@@ -1,5 +1,5 @@
 name: Face Database
-version: "0.1.2"
+version: "0.2.0"
 slug: face_database
 description: Lagrer personer og ansiktsembeddings (SQLite) for Face Recognizer. Kun internt.
 # Ferdigbygd image (se .github/workflows/publish-addons.yml). Taggen er versjonen over.

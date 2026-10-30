@@ -168,8 +168,15 @@ function renderPerson(person) {
       run(async () => { await api("persons/" + person.personId, { method: "DELETE" }); await load(); }, "Person slettet.");
   };
 
+  const entity = el("input", { type: "text", placeholder: "person.navn (HA)", value: person.haPersonEntity || "", maxLength: 70 });
+  const saveEntity = el("button", { textContent: "Lagre kobling" });
+  saveEntity.onclick = () => run(async () => {
+    await api(`persons/${person.personId}/entity`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ entityId: entity.value.trim() || null }) });
+  }, "Kobling lagret.");
+
   return el("div", { className: "card" },
     el("div", { className: "person-head" }, el("div", {}, el("strong", {}, person.name), " ", count), del),
+    el("div", { className: "row" }, entity, saveEntity),
     chips,
     el("div", { className: "row" }, files, upload),
     results);

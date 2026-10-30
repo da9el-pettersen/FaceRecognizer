@@ -32,6 +32,24 @@ public static class DatabaseApi
         api.MapGet("/persons/{personId:guid}", async (Guid personId, EmbeddingStore store, CancellationToken ct) =>
             await store.GetPersonAsync(personId, ct) is { } person ? Results.Ok(person) : Results.NotFound());
 
+        api.MapPut("/persons/{personId:guid}/entity", async (
+            Guid personId, SetPersonEntityRequest request, EmbeddingStore store, IChangeNotifier notifier,
+            CancellationToken ct) =>
+        {
+            if (request.EntityId is not null && !HaPersonEntities.IsValid(request.EntityId))
+            {
+                return Results.BadRequest("Ugyldig entitet. Bruk formatet person.navn.");
+            }
+
+            if (!await store.SetPersonEntityAsync(personId, request.EntityId, ct))
+            {
+                return Results.NotFound();
+            }
+
+            await notifier.NotifyAsync(ct);
+            return Results.NoContent();
+        });
+
         api.MapDelete("/persons/{personId:guid}", async (
             Guid personId, EmbeddingStore store, IChangeNotifier notifier, CancellationToken ct) =>
         {

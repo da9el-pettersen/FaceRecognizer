@@ -49,6 +49,20 @@ public sealed class DatabaseClient : IDatabaseClient
         DeleteAsync($"/persons/{personId}", cancellationToken);
 
     /// <inheritdoc />
+    public async Task<bool> SetPersonEntityAsync(Guid personId, string? entityId, CancellationToken cancellationToken)
+    {
+        using var response = await _http.PutAsJsonAsync(
+            $"/persons/{personId}/entity", new SetPersonEntityRequest(entityId), RecognitionJson.Options, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return false;
+        }
+
+        response.EnsureSuccessStatusCode();
+        return true;
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<PersonEmbeddingDto>> ListPersonEmbeddingsAsync(
         Guid personId, string modelId, CancellationToken cancellationToken) =>
         await _http.GetFromJsonAsync<List<PersonEmbeddingDto>>(

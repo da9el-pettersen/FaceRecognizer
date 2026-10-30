@@ -51,7 +51,8 @@ public sealed class FaceReferenceService
         try
         {
             var snapshot = await _source.LoadAsync(ModelId, cancellationToken);
-            Index.ReplaceAll(snapshot.Embeddings.Select(e => (e.PersonId, e.PersonName, e.EmbeddingId, e.Embedding)));
+            Index.ReplaceAll(snapshot.Embeddings.Select(
+                e => (e.PersonId, e.PersonName, e.EmbeddingId, e.Embedding, e.HaPersonEntity)));
             _loaded = true;
             if (snapshot.OtherModelEmbeddingCount > 0)
             {
@@ -83,6 +84,8 @@ public sealed class FaceReferenceService
         }
 
         var isMatch = best.Score >= threshold;
-        return new FaceMatchResult(true, isMatch ? best.Name : null, best.Score, isMatch, isMatch ? best.PersonId : null);
+        return new FaceMatchResult(
+            true, isMatch ? best.Name : null, best.Score, isMatch, isMatch ? best.PersonId : null,
+            isMatch ? best.HaPersonEntity : null);
     }
 }

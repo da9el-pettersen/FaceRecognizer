@@ -6,8 +6,9 @@ namespace FaceRecognizer.Recognition.Engines;
 /// <param name="Score">Beste likhet (0-1) mot registrerte personer.</param>
 /// <param name="IsMatch">Om scoren oppfyller terskelen.</param>
 /// <param name="PersonId">Unik ID for matchet person, <c>null</c> hvis ukjent.</param>
+/// <param name="PersonEntityId">Koblet Home Assistant person-entitet, <c>null</c> hvis ukjent eller ikke koblet.</param>
 public sealed record FaceMatchResult(
-    bool FaceFound, string? PersonName, float Score, bool IsMatch, Guid? PersonId = null);
+    bool FaceFound, string? PersonName, float Score, bool IsMatch, Guid? PersonId = null, string? PersonEntityId = null);
 
 /// <summary>Utskiftbar ansiktsmotor for deteksjon, embedding og gjenkjenning. Registrering av personer hører ikke hjemme her.</summary>
 public interface IFaceRecognitionProvider

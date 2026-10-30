@@ -3,13 +3,19 @@ namespace FaceRecognizer.Contracts;
 /// <summary>Person i databasetjenesten.</summary>
 /// <param name="PersonId">Unik ID.</param>
 /// <param name="Name">Visningsnavn.</param>
-public sealed record PersonDto(Guid PersonId, string Name);
+/// <param name="HaPersonEntity">Koblet Home Assistant person-entitet (f.eks. <c>person.daniel</c>), eller <c>null</c>.</param>
+public sealed record PersonDto(Guid PersonId, string Name, string? HaPersonEntity = null);
+
+/// <summary>Setter eller fjerner koblingen til en Home Assistant person-entitet.</summary>
+/// <param name="EntityId">Entitets-ID (<c>person.xxx</c>), eller <c>null</c> for å fjerne koblingen.</param>
+public sealed record SetPersonEntityRequest(string? EntityId);
 
 /// <summary>Person med antall embeddings for en modellversjon.</summary>
 /// <param name="PersonId">Unik ID.</param>
 /// <param name="Name">Visningsnavn.</param>
 /// <param name="EmbeddingCount">Antall embeddings for den etterspurte modellen.</param>
-public sealed record PersonSummaryDto(Guid PersonId, string Name, int EmbeddingCount);
+/// <param name="HaPersonEntity">Koblet Home Assistant person-entitet, eller <c>null</c>.</param>
+public sealed record PersonSummaryDto(Guid PersonId, string Name, int EmbeddingCount, string? HaPersonEntity = null);
 
 /// <summary>Forespørsel om å opprette en person.</summary>
 /// <param name="Name">Navn, se <see cref="PersonNames.IsValid"/>.</param>
@@ -47,7 +53,9 @@ public sealed record PersonEmbeddingDto(long EmbeddingId, long ImageId);
 /// <param name="PersonId">Eier.</param>
 /// <param name="PersonName">Eierens navn.</param>
 /// <param name="Embedding">Normalisert vektor.</param>
-public sealed record EmbeddingDto(long EmbeddingId, Guid PersonId, string PersonName, float[] Embedding);
+/// <param name="HaPersonEntity">Eierens koblede Home Assistant person-entitet, eller <c>null</c>.</param>
+public sealed record EmbeddingDto(
+    long EmbeddingId, Guid PersonId, string PersonName, float[] Embedding, string? HaPersonEntity = null);
 
 /// <summary>Alle embeddings for én modellversjon, til lasting i minneindeksen.</summary>
 /// <param name="Embeddings">Embeddings for den etterspurte modellen.</param>
@@ -75,7 +83,9 @@ public sealed record EmbeddingsChanged(DateTimeOffset At)
 /// <param name="PersonId">Unik person-ID.</param>
 /// <param name="Name">Navn.</param>
 /// <param name="Embeddings">Embeddings for gjeldende modell.</param>
-public sealed record PersonDetailDto(Guid PersonId, string Name, IReadOnlyList<PersonEmbeddingDto> Embeddings);
+/// <param name="HaPersonEntity">Koblet Home Assistant person-entitet, eller <c>null</c>.</param>
+public sealed record PersonDetailDto(
+    Guid PersonId, string Name, IReadOnlyList<PersonEmbeddingDto> Embeddings, string? HaPersonEntity = null);
 
 /// <summary>Utfall for én fil ved opplasting av referansebilder (Admin-API).</summary>
 /// <param name="FileName">Filnavn.</param>

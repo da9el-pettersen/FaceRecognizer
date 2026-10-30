@@ -38,7 +38,7 @@ public sealed class ReferenceService
 
         var model = await _recognition.GetModelAsync(cancellationToken);
         var embeddings = await _database.ListPersonEmbeddingsAsync(personId, model.ModelId, cancellationToken);
-        return new PersonDetailDto(person.PersonId, person.Name, embeddings);
+        return new PersonDetailDto(person.PersonId, person.Name, embeddings, person.HaPersonEntity);
     }
 
     /// <summary>

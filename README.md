@@ -68,7 +68,10 @@ Alle kall krever `Authorization: Bearer <ADMIN_TOKEN>`.
 | `POST /api/reindex?rebuild=true` | Embedder bilder uten embedding for gjeldende modell (`rebuild`: alle) |
 | `GET /api/metrics` | Tid for deteksjon, embedding og matching |
 
-Resultatet på MQTT inneholder i tillegg `personId` (GUID) for gjenkjente personer.
+Resultatet på MQTT inneholder i tillegg `personId` (GUID) for gjenkjente personer, og `personEntityId`
+(f.eks. `person.daniel`) hvis personen er koblet til en Home Assistant person-entitet i Admin. Automasjoner kan da
+kreve at telefonen er hjemme: `{{ is_state(value_json.personEntityId, 'home') }}`. Uten kobling er `personEntityId`
+`null`, og slike treff bør ikke åpne dør.
 
 ## Installere på HAOS (fire apper fra dette repoet)
 Alt gjøres i HA-nettgrensesnittet. Appene hentes direkte fra GitHub (repoet må være offentlig), og ingenting bygges på HAOS-maskinen for Database, Admin og Recognition.

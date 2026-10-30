@@ -5,13 +5,16 @@ namespace FaceRecognizer.Recognition.Engines;
 /// <param name="Name">Visningsnavn.</param>
 /// <param name="EmbeddingIds">Database-ID for hver embedding (samme rekkefølge som <paramref name="Embeddings"/>).</param>
 /// <param name="Embeddings">Normaliserte embeddings.</param>
-public sealed record IndexedPerson(Guid PersonId, string Name, long[] EmbeddingIds, float[][] Embeddings);
+/// <param name="HaPersonEntity">Koblet Home Assistant person-entitet, eller <c>null</c>.</param>
+public sealed record IndexedPerson(
+    Guid PersonId, string Name, long[] EmbeddingIds, float[][] Embeddings, string? HaPersonEntity = null);
 
 /// <summary>Beste treff i indeksen.</summary>
 /// <param name="PersonId">Person med høyest likhet.</param>
 /// <param name="Name">Personens navn.</param>
 /// <param name="Score">Cosinus-likhet (høyeste blant personens embeddings).</param>
-public readonly record struct IndexMatch(Guid PersonId, string Name, float Score);
+/// <param name="HaPersonEntity">Koblet Home Assistant person-entitet, eller <c>null</c>.</param>
+public readonly record struct IndexMatch(Guid PersonId, string Name, float Score, string? HaPersonEntity = null);
 
 /// <summary>
 /// Minnebasert indeks over normaliserte embeddings, én modellversjon om gangen.
@@ -54,16 +57,17 @@ public sealed class EmbeddingIndex
     /// <summary>Bytter ut hele indeksen atomisk.</summary>
     /// <param name="entries">Embeddings som skal indekseres. Må være normalisert og ha lik dimensjon.</param>
     /// <exception cref="ArgumentException">Ulik dimensjon eller ikke-normalisert vektor.</exception>
-    public void ReplaceAll(IEnumerable<(Guid PersonId, string Name, long EmbeddingId, float[] Embedding)> entries)
+    public void ReplaceAll(
+        IEnumerable<(Guid PersonId, string Name, long EmbeddingId, float[] Embedding, string? HaPersonEntity)> entries)
     {
-        var grouped = new Dictionary<Guid, (string Name, List<long> Ids, List<float[]> Vectors)>();
+        var grouped = new Dictionary<Guid, (string Name, string? Entity, List<long> Ids, List<float[]> Vectors)>();
         var dimension = 0;
-        foreach (var (personId, name, embeddingId, embedding) in entries)
+        foreach (var (personId, name, embeddingId, embedding, entity) in entries)
         {
             Validate(embedding, ref dimension);
             if (!grouped.TryGetValue(personId, out var group))
             {
-                group = (name, [], []);
+                group = (name, entity, [], []);
                 grouped[personId] = group;
             }
 
@@ -74,7 +78,7 @@ public sealed class EmbeddingIndex
         var next = new Dictionary<Guid, IndexedPerson>(grouped.Count);
         foreach (var (personId, group) in grouped)
         {
-            next[personId] = new IndexedPerson(personId, group.Name, [.. group.Ids], [.. group.Vectors]);
+            next[personId] = new IndexedPerson(personId, group.Name, [.. group.Ids], [.. group.Vectors], group.Entity);
         }
 
         lock (_writeLock)
@@ -88,8 +92,9 @@ public sealed class EmbeddingIndex
     /// <param name="name">Personens navn.</param>
     /// <param name="embeddingId">Database-ID for embeddingen.</param>
     /// <param name="embedding">Normalisert embedding.</param>
+    /// <param name="haPersonEntity">Koblet Home Assistant person-entitet, eller <c>null</c>.</param>
     /// <exception cref="ArgumentException">Feil dimensjon eller ikke-normalisert vektor.</exception>
-    public void Add(Guid personId, string name, long embeddingId, float[] embedding)
+    public void Add(Guid personId, string name, long embeddingId, float[] embedding, string? haPersonEntity = null)
     {
         lock (_writeLock)
         {
@@ -100,10 +105,11 @@ public sealed class EmbeddingIndex
                 ? existing with
                 {
                     Name = name,
+                    HaPersonEntity = haPersonEntity,
                     EmbeddingIds = [.. existing.EmbeddingIds, embeddingId],
                     Embeddings = [.. existing.Embeddings, embedding]
                 }
-                : new IndexedPerson(personId, name, [embeddingId], [embedding]);
+                : new IndexedPerson(personId, name, [embeddingId], [embedding], haPersonEntity);
             _persons = next;
         }
     }
@@ -193,7 +199,7 @@ public sealed class EmbeddingIndex
             }
         }
 
-        match = found ? new IndexMatch(bestPerson!.PersonId, bestPerson.Name, bestScore) : default;
+        match = found ? new IndexMatch(bestPerson!.PersonId, bestPerson.Name, bestScore, bestPerson.HaPersonEntity) : default;
         return found;
     }
 

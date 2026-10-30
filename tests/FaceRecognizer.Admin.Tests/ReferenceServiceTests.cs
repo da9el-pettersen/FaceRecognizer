@@ -135,6 +135,17 @@ public sealed class ReferenceServiceTests
         public Task<bool> DeletePersonAsync(Guid personId, CancellationToken cancellationToken) =>
             Task.FromResult(_persons.RemoveAll(p => p.PersonId == personId) > 0);
 
+        public Task<bool> SetPersonEntityAsync(Guid personId, string? entityId, CancellationToken cancellationToken)
+        {
+            var index = _persons.FindIndex(p => p.PersonId == personId);
+            if (index >= 0)
+            {
+                _persons[index] = _persons[index] with { HaPersonEntity = entityId };
+            }
+
+            return Task.FromResult(index >= 0);
+        }
+
         public Task<IReadOnlyList<PersonEmbeddingDto>> ListPersonEmbeddingsAsync(
             Guid personId, string modelId, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<PersonEmbeddingDto>>(PersonEmbeddings.GetValueOrDefault(personId, []));
