@@ -1,5 +1,5 @@
 name: Face Recognizer
-version: "0.1.7"
+version: "0.1.8"
 slug: face_recognizer
 # Ferdigbygd image (se .github/workflows/publish-addons.yml). Taggen er versjonen under.
 image: ghcr.io/da9el-pettersen/facerecognizer-recognition
@@ -62,7 +62,7 @@ schema:
     model_name: str
     threshold: float(0.1,1)
   liveness:
-    min_score: float(0.5,1)
+    min_score: float(0,1)
   pipeline:
     cooldown: str
     liveness_attempts: int(1,10)
