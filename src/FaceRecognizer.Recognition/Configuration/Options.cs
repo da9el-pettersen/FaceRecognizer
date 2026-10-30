@@ -79,8 +79,8 @@ public sealed class DatabaseOptions
 /// <summary>Innstillinger for selve pipelinen.</summary>
 public sealed class PipelineOptions
 {
-    /// <summary>Minste tid mellom to behandlinger, for å unngå gjentatte triggere.</summary>
-    public TimeSpan Cooldown { get; set; } = TimeSpan.FromSeconds(10);
+    /// <summary>Minste tid mellom to behandlinger. Standard er ingen pause: tjenesten tar neste bilde så fort den er ledig.</summary>
+    public TimeSpan Cooldown { get; set; } = TimeSpan.Zero;
 
     /// <summary>
     /// Antall forsøk (med nye bilder) når en person er gjenkjent, men liveness feiler.

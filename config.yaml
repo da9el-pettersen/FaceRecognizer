@@ -1,5 +1,5 @@
 name: Face Recognizer
-version: "0.1.5"
+version: "0.1.6"
 slug: face_recognizer
 # Ferdigbygd image (se .github/workflows/publish-addons.yml). Taggen er versjonen under.
 image: ghcr.io/da9el-pettersen/facerecognizer-recognition
@@ -35,7 +35,7 @@ options:
   liveness:
     min_score: 0.8
   pipeline:
-    cooldown: "00:00:01"
+    cooldown: "00:00:00"
     liveness_attempts: 4
   # Intern API (/internal/embed) som Admin-tjenesten bruker. Tomt token = av.
   api:
