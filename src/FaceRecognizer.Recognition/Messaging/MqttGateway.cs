@@ -66,11 +66,15 @@ public sealed class MqttGateway : BackgroundService
 
             if (!_gate.TryEnter())
             {
-                _logger.LogDebug("Opptatt, trigger forkastet.");
+                _logger.LogInformation("Trigger mottatt, men forkastet (opptatt eller i pause).");
             }
             else if (!_triggers.Writer.TryWrite(DateTimeOffset.UtcNow))
             {
                 _gate.Exit(TimeSpan.Zero);
+            }
+            else
+            {
+                _logger.LogInformation("Trigger mottatt, starter gjenkjenning.");
             }
 
             return Task.CompletedTask;
