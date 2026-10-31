@@ -1,7 +1,7 @@
 # Face Recognizer
 
 Ansiktsgjenkjenning fra Reolink-kamera for Home Assistant. Modul A (denne tjenesten, .NET 10) lytter på en MQTT-trigger,
-henter snapshot, gjenkjenner ansikt og sjekker liveness (IR), og publiserer resultatet på MQTT. Modul B er en
+leser RTSP-video, gjenkjenner ansikt og sjekker liveness (RGB, flere bilder), og publiserer resultatet på MQTT. Modul B er en
 HA-automasjon (`ha/automations.example.yaml`) som låser/låser opp og varsler.
 
 **Kjører helt lokalt.** Ingen tjeneste krever internett ved kjøring (kun bygging henter pakker/modellvekter).
@@ -151,5 +151,31 @@ logges ved endring (`Helsestatus: …`). Ingen helse-port åpnes. DeepFace nede 
 
 ## Kalibrering (må gjøres med egne bilder)
 - `DEEPFACE_THRESHOLD` (cosinus-likhet, standard 0.5, SFace sin egen anbefaling er 0.407).
-- `Liveness:MinScore` (standard 0.8). MiniFASNet er RGB-trent; nøyaktighet på IR er ikke verifisert.
-- Skjult kjent begrensning: IR-bildet verifiseres ikke som samme person som fargebildet.
+- `Liveness:MinScore` (standard 0.8) og `Liveness:MinLiveFraction` (0.6): median og andel bilder over terskel i sekvensen.
+- Modellscore er ikke kalibrert sannsynlighet. Mål falske godkjenninger/avvisninger med egne bilder, utskrift og skjerm.
+
+## Video og liveness (RTSP)
+Én ffmpeg-prosess leser kameraets RTSP-strøm (`Camera:Stream` = `main`/`sub`, ca. `Stream:Fps` 5 bilder/s) inn i en
+ringbuffer. Ved trigger analyseres siste `Pipeline:Window` (3 s, minst `MinFrames` 8) – gjenkjenning og liveness
+bruker **samme bilder**. Resultatet har `trackId`, `frameFrom`/`frameTo` og `windowStart`/`windowEnd`.
+- ffmpeg må finnes (er med i imaget; lokalt `Stream:FfmpegPath`). `Camera:RtspUrl` overstyrer URL (ellers
+  `rtsp://bruker:passord@vert:554/Preview_01_main`). Tilkobling gjenopprettes automatisk; ved reconnect startes en ny
+  økt, og gamle/gjentatte bilder kan aldri inngå i en sekvens (`stale_frames`, `too_few_frames`).
+- Ansiktet spores gjennom sekvensen (IoU) og identiteten må være samstemt på flere bilder, ellers avvises sekvensen
+  (`identity_changed`, `ambiguous_tracking`, `track_unstable`).
+- Bildetype (RGB/IR) bestemmes av kromatisk spredning pluss kameraets konfigurerte dag/natt-modus. Reolinks HTTP-API
+  gir kun *konfigurert* modus, ikke faktisk tilstand i Auto (det krever Baichuan, port 9000, ikke implementert).
+- MiniFASNet (V2 + V1SE) kjører kun på RGB. IR/ukjent gir `livenessUnavailable` (aldri `verified`) så lenge ingen
+  IR-modell er registrert (`ILivenessModel.Supports`). `Liveness:Required=true` er standard.
+- Statusfelt (nye, valgfrie): `recognitionStatus` (`faceRecognized|unknown|noFace|notAttempted|identityConflict`),
+  `livenessStatus` (`livenessPassed|livenessFailed|livenessUnavailable|notRequired|notEvaluated`), `imageMode`, `reason`.
+  `outcome` kan nå også være `livenessUnavailable`; øvrige felt er uendret.
+- Kjent begrensning: helt identiske påfølgende bilder (statisk scene) forkastes som duplikater.
+- ffmpeg kjøres uten `-fflags nobuffer`/`-flags low_delay`: med Reolink-kameraet ga disse HEVC-dekodefeil og tapte bilder.
+- Mål ressursbruk mot ditt kamera: `dotnet FaceRecognizer.Recognition.dll streamtest --seconds 30 [--stream main|sub]`.
+- Test hele pipelinen på ekte video: `livetest --runs N [--stream main|sub] [--csv <absolutt sti>]`. Med
+  `--enroll Navn --enroll-count 8` registreres en testperson kun i minnet (FaceAiSharp), og
+  `--phases "ekte:6,skjerm_foto:10" --gate <mappe>` pauser før hvert scenario til filen `go` opprettes i mappen.
+  Lokal kameraoppsett ligger i `camera.local.env` (ikke committet, se `camera.local.env.example`).
+- `Face:Threshold` er motorspesifikk: standard 0.62 (FaceAiSharp; var 0.98, urealistisk for live video). Typiske score for samme person er 0.65–0.95; kalibrer med egne data.
+- Flerbildeanalyse øker stabilitet, men beskytter ikke alene mot video-replay.

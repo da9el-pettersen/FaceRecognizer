@@ -12,6 +12,7 @@ using FaceRecognizer.Recognition.Configuration;
 using FaceRecognizer.Recognition.Health;
 using FaceRecognizer.Recognition.Tools;
 using FaceRecognizer.Recognition.Api;
+using FaceRecognizer.Recognition.Video;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,6 +21,7 @@ await builder.Configuration.AddHomeAssistantOptionsAsync(useMqttService: true);
 
 builder.Services.Configure<MqttOptions>(builder.Configuration.GetSection("Mqtt"));
 builder.Services.Configure<CameraOptions>(builder.Configuration.GetSection("Camera"));
+builder.Services.Configure<StreamOptions>(builder.Configuration.GetSection("Stream"));
 builder.Services.Configure<PipelineOptions>(builder.Configuration.GetSection("Pipeline"));
 builder.Services.Configure<FaceMatchOptions>(builder.Configuration.GetSection("Face"));
 builder.Services.Configure<LivenessOptions>(builder.Configuration.GetSection("Liveness"));
@@ -39,6 +41,12 @@ builder.Services.AddHttpClient<IEmbeddingSource, DatabaseEmbeddingSource>((sp, c
         client.DefaultRequestHeaders.Authorization = new("Bearer", database.Token);
     }
 });
+
+// livetest --enroll bruker en minneindeks uten database.
+if (args.Contains("livetest") && args.Contains("--enroll"))
+{
+    builder.Services.AddSingleton<IEmbeddingSource, EmptyEmbeddingSource>();
+}
 
 // Internt API for embedding-generering: kun aktivt med token, og lytter lokalt med mindre Api:Url sier noe annet.
 var apiOptions = builder.Configuration.GetSection("Api").Get<InternalApiOptions>() ?? new InternalApiOptions();
@@ -106,9 +114,23 @@ else
         sp.GetRequiredService<FaceMetrics>(),
         sp.GetRequiredService<ILogger<FaceAiSharpRecognitionProvider>>()));
 }
-builder.Services.AddSingleton<ILivenessChecker>(sp => new MiniFasNetLivenessChecker(
+builder.Services.AddSingleton(sp => new MiniFasNetLivenessChecker(
     FaceAiSharpBundleFactory.CreateFaceDetectorWithLandmarks(),
     sp.GetRequiredService<IOptions<LivenessOptions>>()));
+builder.Services.AddSingleton<ILivenessChecker>(sp => sp.GetRequiredService<MiniFasNetLivenessChecker>());
+builder.Services.AddSingleton<ILivenessModel>(sp => sp.GetRequiredService<MiniFasNetLivenessChecker>());
+
+// Videokilde og analyse: én RTSP-forbindelse og én buffer deles av gjenkjenning og liveness.
+builder.Services.AddSingleton(sp => new FrameBuffer(sp.GetRequiredService<IOptions<StreamOptions>>().Value.BufferFrames));
+builder.Services.AddSingleton<RtspFrameSource>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<RtspFrameSource>());
+builder.Services.AddSingleton<CameraModeMonitor>();
+builder.Services.AddSingleton<ICameraModeProvider>(sp => sp.GetRequiredService<CameraModeMonitor>());
+builder.Services.AddHostedService(sp => sp.GetRequiredService<CameraModeMonitor>());
+builder.Services.AddSingleton<IFrameFaceDetector>(sp => new FaceAiSharpFrameDetector(
+    FaceAiSharpBundleFactory.CreateFaceDetectorWithLandmarks(),
+    sp.GetRequiredService<IOptions<PipelineOptions>>().Value.DetectionWidth));
+builder.Services.AddSingleton<SequenceEvaluator>();
 builder.Services.AddSingleton<MqttGateway>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<MqttGateway>());
 builder.Services.AddHostedService<RecognitionWorker>();
@@ -120,6 +142,16 @@ var app = builder.Build();
 if (args.Contains("selftest"))
 {
     return await SelfTest.RunAsync(app.Services, args);
+}
+
+if (args.Contains("streamtest"))
+{
+    return await StreamTest.RunAsync(app.Services, args);
+}
+
+if (args.Contains("livetest"))
+{
+    return await LiveTest.RunAsync(app.Services, args);
 }
 
 if (args.Contains("enroll"))

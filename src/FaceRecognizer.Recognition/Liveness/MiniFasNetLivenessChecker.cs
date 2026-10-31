@@ -4,18 +4,19 @@ using FaceRecognizer.Recognition;
 using Microsoft.Extensions.Options;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
+using FaceRecognizer.Contracts;
+using FaceRecognizer.Recognition.Pipeline;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp.Processing;
 
 namespace FaceRecognizer.Recognition.Liveness;
 
 /// <summary>
 /// Liveness med MiniFASNetV2 og MiniFASNetV1SE (Silent-Face-Anti-Spoofing) via ONNX Runtime.
-/// Gjennomsnittet av "ekte"-sannsynligheten fra begge modellene må være over terskelen. Modellene er trent på RGB, så scoren på
-/// IR-bilder må kalibreres mot egne opptak.
+/// Gjennomsnittet av "ekte"-sannsynligheten fra begge modellene brukes som score per bilde. Modellene er trent på RGB og
+/// støtter derfor kun fargebilder (<see cref="Supports"/>). Scoren er ikke en kalibrert sannsynlighet.
 /// </summary>
-public sealed class MiniFasNetLivenessChecker : ILivenessChecker, IDisposable
+public sealed class MiniFasNetLivenessChecker : ILivenessChecker, ILivenessModel, IDisposable
 {
     private const int RealClassIndex = 1;
 
@@ -33,6 +34,19 @@ public sealed class MiniFasNetLivenessChecker : ILivenessChecker, IDisposable
     }
 
     /// <inheritdoc />
+    public string Name => "MiniFASNet";
+
+    /// <inheritdoc />
+    public float MinScore => _options.MinScore;
+
+    /// <inheritdoc />
+    /// <remarks>Modellene er trent på RGB-bilder. IR/svart-hvitt støttes ikke, og gir aldri en liveness-vurdering.</remarks>
+    public bool Supports(ImageMode mode) => mode == ImageMode.Color;
+
+    /// <inheritdoc />
+    public float ScoreFace(Frame frame, FaceBox box) => ScoreFace(frame.Rgb, frame.Width, frame.Height, box);
+
+    /// <inheritdoc />
     public LivenessResult Check(byte[] image)
     {
         using var source = Image.Load<Rgb24>(image);
@@ -45,22 +59,54 @@ public sealed class MiniFasNetLivenessChecker : ILivenessChecker, IDisposable
             return new LivenessResult(false, 0f);
         }
 
-        var total = 0f;
-        foreach (var (session, scale, height, width) in _models)
-        {
-            var rect = CalculateCropRectangle(
-                source.Width, source.Height, face.Value.Box.X, face.Value.Box.Y,
-                face.Value.Box.Width, face.Value.Box.Height, scale);
-            using var crop = source.Clone(ctx => ctx
-                .Crop(new SixLabors.ImageSharp.Rectangle(rect.X, rect.Y, rect.Width, rect.Height))
-                .Resize(width, height, KnownResamplers.Triangle));
+        var pixels = new byte[source.Width * source.Height * 3];
+        source.CopyPixelDataTo(pixels);
+        var box = new FaceBox(face.Value.Box.X, face.Value.Box.Y, face.Value.Box.Width, face.Value.Box.Height);
+        var score = ScoreFace(pixels, source.Width, source.Height, box);
+        return new LivenessResult(score >= _options.MinScore, score);
+    }
 
-            var real = Predict(session, crop, height, width);
-            total += real;
+    /// <summary>Gjennomsnittlig "ekte"-sannsynlighet (0-1) for ett ansikt, over begge modellene.</summary>
+    /// <param name="rgb">Hele bildet som 24-bits RGB.</param>
+    /// <param name="width">Bildets bredde.</param>
+    /// <param name="height">Bildets høyde.</param>
+    /// <param name="box">Ansiktsboksen i bildet.</param>
+    public float ScoreFace(ReadOnlySpan<byte> rgb, int width, int height, FaceBox box)
+    {
+        var scores = ScorePerModel(rgb, width, height, box);
+        return scores.Average();
+    }
+
+    /// <summary>"Ekte"-sannsynlighet fra hver enkelt modell, i samme rekkefølge som de er lastet (V2, V1SE).</summary>
+    /// <param name="rgb">Hele bildet som 24-bits RGB.</param>
+    /// <param name="width">Bildets bredde.</param>
+    /// <param name="height">Bildets høyde.</param>
+    /// <param name="box">Ansiktsboksen i bildet.</param>
+    internal float[] ScorePerModel(ReadOnlySpan<byte> rgb, int width, int height, FaceBox box)
+    {
+        var scores = new float[_models.Count];
+        for (var i = 0; i < _models.Count; i++)
+        {
+            var (session, scale, modelHeight, modelWidth) = _models[i];
+            var rect = CalculateCropRectangle(width, height, box.X, box.Y, box.Width, box.Height, scale);
+            scores[i] = Softmax(Predict(session, rgb, width, rect, modelHeight, modelWidth))[RealClassIndex];
         }
 
-        var score = total / _models.Count;
-        return new LivenessResult(score >= _options.MinScore, score);
+        return scores;
+    }
+
+    /// <summary>Rå logits (uten softmax) per modell. Brukes til å verifisere preprocessing mot referanseimplementasjonen.</summary>
+    internal float[][] LogitsPerModel(ReadOnlySpan<byte> rgb, int width, int height, FaceBox box)
+    {
+        var logits = new float[_models.Count][];
+        for (var i = 0; i < _models.Count; i++)
+        {
+            var (session, scale, modelHeight, modelWidth) = _models[i];
+            var rect = CalculateCropRectangle(width, height, box.X, box.Y, box.Width, box.Height, scale);
+            logits[i] = Predict(session, rgb, width, rect, modelHeight, modelWidth);
+        }
+
+        return logits;
     }
 
     /// <summary>Frigjør ONNX-sesjonene.</summary>
@@ -98,25 +144,16 @@ public sealed class MiniFasNetLivenessChecker : ILivenessChecker, IDisposable
         return exp.Select(v => v / sum).ToArray();
     }
 
-    private static float Predict(InferenceSession session, Image<Rgb24> crop, int height, int width)
+    private static float[] Predict(
+        InferenceSession session, ReadOnlySpan<byte> rgb, int imageWidth, System.Drawing.Rectangle crop, int height, int width)
     {
-        // Modellen forventer BGR, 0-255, NCHW uten normalisering.
-        var tensor = new DenseTensor<float>([1, 3, height, width]);
-        for (var y = 0; y < height; y++)
-        {
-            for (var x = 0; x < width; x++)
-            {
-                var p = crop[x, y];
-                tensor[0, 0, y, x] = p.B;
-                tensor[0, 1, y, x] = p.G;
-                tensor[0, 2, y, x] = p.R;
-            }
-        }
-
+        // Modellen forventer BGR, 0-255, NCHW uten normalisering (se MiniFasNetPreprocessor).
+        var data = new float[3 * height * width];
+        MiniFasNetPreprocessor.Fill(data, rgb, imageWidth, crop, width, height);
+        var tensor = new DenseTensor<float>(data, [1, 3, height, width]);
         var inputName = session.InputNames[0];
         using var results = session.Run([NamedOnnxValue.CreateFromTensor(inputName, tensor)]);
-        var logits = results[0].AsEnumerable<float>().ToArray();
-        return Softmax(logits)[RealClassIndex];
+        return results[0].AsEnumerable<float>().ToArray();
     }
 
     private void Load(string fileName, float scale)

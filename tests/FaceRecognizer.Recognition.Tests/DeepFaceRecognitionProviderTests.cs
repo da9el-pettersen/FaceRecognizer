@@ -190,31 +190,22 @@ public sealed class DeepFaceRecognitionProviderTests
     }
 
     [Fact]
-    public void Resultat_inneholder_kamera_motor_og_antall_ansikter_men_ingen_embedding()
+    public void Resultat_er_bakoverkompatibelt_og_inneholder_ingen_embedding()
     {
-        var faces = new[] { new FaceMatchResult(true, "Ola", 0.9f, true), new FaceMatchResult(true, null, 0.1f, false) };
-
-        var result = RecognitionWorker.ToResult(faces, new LivenessResult(true, 0.95f), "inngang", "DeepFace");
+        var identity = new FrameIdentity(Guid.NewGuid(), "Ola", "person.ola", 0.8f, true);
+        var result = ResultComposer.Compose(
+            RecognitionStatus.FaceRecognized, LivenessStatus.LivenessPassed, identity, 0.8f, 0.95f, null,
+            null, "inngang", "DeepFace", DateTimeOffset.UnixEpoch);
         var json = JsonSerializer.Serialize(result, RecognitionJson.Options);
 
-        Assert.Equal(RecognitionOutcome.Verified, result.Outcome);
+        Assert.Contains("\"outcome\":\"verified\"", json);
+        Assert.Contains("\"personName\":\"Ola\"", json);
+        Assert.Contains("\"score\":0.8", json);
         Assert.Contains("\"cameraName\":\"inngang\"", json);
-        Assert.Contains("\"faceCount\":2", json);
         Assert.Contains("\"provider\":\"DeepFace\"", json);
+        Assert.Contains("\"personEntityId\":\"person.ola\"", json);
+        Assert.Contains("\"livenessStatus\":\"livenessPassed\"", json);
         Assert.DoesNotContain("embedding", json, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void Utfall_mappes_fra_motorens_resultat()
-    {
-        var unknown = RecognitionWorker.ToResult([new FaceMatchResult(true, null, 0.2f, false)], null, "c", "p");
-        var none = RecognitionWorker.ToResult([], null, "c", "p");
-        var spoof = RecognitionWorker.ToResult(
-            [new FaceMatchResult(true, "Ola", 0.9f, true)], new LivenessResult(false, 0.1f), "c", "p");
-
-        Assert.Equal(RecognitionOutcome.Unknown, unknown.Outcome);
-        Assert.Equal(RecognitionOutcome.NoFace, none.Outcome);
-        Assert.Equal(RecognitionOutcome.LivenessFailed, spoof.Outcome);
     }
 
     /// <summary>Live-test mot en kjørende DeepFace. Kjøres kun når DEEPFACE_TEST_URL og testdata er satt.</summary>

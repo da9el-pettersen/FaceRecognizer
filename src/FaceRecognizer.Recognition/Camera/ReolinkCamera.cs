@@ -75,6 +75,27 @@ public sealed class ReolinkCamera
         await SendCommandAsync("SetIsp", new JsonObject { ["Isp"] = ispNode }, cancellationToken);
     }
 
+    /// <summary>
+    /// Leser dag/natt-modusen som er konfigurert i kameraet (kun lesing). I <see cref="ReportedDayNight.Auto"/> sier verdien
+    /// ingenting om hva kameraet leverer akkurat nå.
+    /// </summary>
+    /// <param name="cancellationToken">Avbruddstoken.</param>
+    public async Task<ReportedDayNight> GetReportedDayNightAsync(CancellationToken cancellationToken)
+    {
+        var isp = await SendCommandAsync("GetIsp", new JsonObject { ["channel"] = _options.Channel }, cancellationToken);
+        return ParseDayNight(isp?["value"]?["Isp"]?["dayNight"]?.GetValue<string>());
+    }
+
+    /// <summary>Oversetter kameraets <c>dayNight</c>-verdi.</summary>
+    /// <param name="value">Verdi fra GetIsp, f.eks. <c>Auto</c>, <c>Color</c> eller <c>Black&amp;White</c>.</param>
+    public static ReportedDayNight ParseDayNight(string? value) => value?.Trim().ToLowerInvariant() switch
+    {
+        "auto" => ReportedDayNight.Auto,
+        "color" => ReportedDayNight.Color,
+        "black&white" or "blackwhite" or "black&white mode" => ReportedDayNight.BlackAndWhite,
+        _ => ReportedDayNight.Unknown
+    };
+
     private async Task<string> GetTokenAsync(CancellationToken cancellationToken)
     {
         if (_token is not null && DateTimeOffset.UtcNow < _tokenExpires)

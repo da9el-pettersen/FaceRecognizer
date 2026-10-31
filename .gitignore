@@ -487,3 +487,7 @@ faces/
 # Testbilder (ikke egne, hentes manuelt)
 testdata/
 selftest-out/
+
+# Lokal kameratest (inneholder passord)
+camera.local.env
+.local/

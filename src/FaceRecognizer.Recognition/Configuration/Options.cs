@@ -54,6 +54,34 @@ public sealed class CameraOptions
 
     /// <summary>Ventetid etter bytte til IR før bilde tas.</summary>
     public TimeSpan IrSettleDelay { get; set; } = TimeSpan.FromSeconds(2);
+
+    /// <summary>Full RTSP-adresse. Tomt = bygges fra <see cref="BaseUrl"/>, bruker, passord, kanal og <see cref="Stream"/>.</summary>
+    public string RtspUrl { get; set; } = "";
+
+    /// <summary>Hvilken strøm som brukes når RTSP-adressen bygges: <c>main</c> (best kvalitet) eller <c>sub</c> (lav CPU).</summary>
+    public string Stream { get; set; } = "main";
+}
+
+/// <summary>Innstillinger for den delte videostrømmen (RTSP via ffmpeg) og bildebufferen.</summary>
+public sealed class StreamOptions
+{
+    /// <summary>Analysefrekvens (bilder per sekund). Strømmen reduseres til dette i ffmpeg.</summary>
+    public double Fps { get; set; } = 5;
+
+    /// <summary>Største bredde på bildene som analyseres. Større bilder skaleres ned i ffmpeg.</summary>
+    public int MaxWidth { get; set; } = 1280;
+
+    /// <summary>Antall bilder bufferen holder.</summary>
+    public int BufferFrames { get; set; } = 20;
+
+    /// <summary>Sti til ffmpeg.</summary>
+    public string FfmpegPath { get; set; } = "ffmpeg";
+
+    /// <summary>Hvis ingen nye bilder kommer innen dette, regnes strømmen som død og kobles til på nytt.</summary>
+    public TimeSpan StallTimeout { get; set; } = TimeSpan.FromSeconds(10);
+
+    /// <summary>Lengste ventetid mellom reconnect-forsøk (eksponentiell økning).</summary>
+    public TimeSpan ReconnectMaxBackoff { get; set; } = TimeSpan.FromSeconds(30);
 }
 
 /// <summary>Innstillinger for det interne API-et som Admin bruker til å lage embeddings.</summary>
@@ -82,9 +110,39 @@ public sealed class PipelineOptions
     /// <summary>Minste tid mellom to behandlinger. Standard er ingen pause: tjenesten tar neste bilde så fort den er ledig.</summary>
     public TimeSpan Cooldown { get; set; } = TimeSpan.Zero;
 
+    /// <summary>Lengden på bildesekvensen som analyseres per trigger.</summary>
+    public TimeSpan Window { get; set; } = TimeSpan.FromSeconds(3);
+
+    /// <summary>Minste antall bilder i sekvensen. Færre gir <c>error</c> (døren forblir låst).</summary>
+    public int MinFrames { get; set; } = 8;
+
+    /// <summary>Eldste tillatte alder på siste bilde. Eldre bilder brukes aldri som ny sekvens.</summary>
+    public TimeSpan MaxFrameAge { get; set; } = TimeSpan.FromSeconds(2);
+
+    /// <summary>Største tillatte hull mellom to bilder i sekvensen.</summary>
+    public TimeSpan MaxFrameGap { get; set; } = TimeSpan.FromSeconds(1);
+
+    /// <summary>Bredden bildene skaleres ned til for ansiktsdeteksjon. Gjenkjenning og liveness bruker full analyseoppløsning.</summary>
+    public int DetectionWidth { get; set; } = 640;
+
+    /// <summary>Minste ansiktsbredde (piksler i analysebildet) for å gjenkjenne og vurdere liveness.</summary>
+    public int MinFaceWidth { get; set; } = 60;
+
+    /// <summary>Antall bilder i sporet som gjenkjennes hver for seg for å bekrefte at det er samme person.</summary>
+    public int RecognitionFrames { get; set; } = 3;
+
+    /// <summary>Minste antall av disse bildene som må peke på samme person.</summary>
+    public int IdentityMinAgreement { get; set; } = 2;
+
+    /// <summary>Minste andel av disse bildene som må peke på samme person.</summary>
+    public float IdentityMinFraction { get; set; } = 0.67f;
+
+    /// <summary>Minste overlapp (IoU) for å koble et ansikt til samme spor mellom to bilder.</summary>
+    public float TrackMinIou { get; set; } = 0.3f;
+
     /// <summary>
-    /// Antall forsøk (med nye bilder) når en person er gjenkjent, men liveness feiler.
-    /// Etter siste forsøk publiseres LivenessFailed og tjenesten går tilbake til vanlig gjenkjenning.
+    /// Om ansiktsgjenkjenning kjøres på IR/svart-hvitt-bilder. Av som standard fordi motoren ikke er validert for IR.
+    /// Liveness er uansett utilgjengelig i IR uten egnet modell, så resultatet blir aldri <c>verified</c> når liveness kreves.
     /// </summary>
-    public int LivenessAttempts { get; set; } = 4;
+    public bool InfraredRecognition { get; set; }
 }

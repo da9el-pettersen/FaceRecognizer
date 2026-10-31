@@ -12,7 +12,7 @@ public sealed class FaceMatchOptions
     public string Provider { get; set; } = "FaceAiSharp";
 
     /// <summary>Minste likhet (0-1) for FaceAiSharp. Må kalibreres mot egne bilder.</summary>
-    public float Threshold { get; set; } = 0.98f;
+    public float Threshold { get; set; } = 0.62f;
 }
 
 /// <summary>Ansiktsmotor basert på FaceAiSharp (lokal ONNX, ingen ekstern tjeneste).</summary>

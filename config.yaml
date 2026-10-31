@@ -1,5 +1,5 @@
 name: Face Recognizer
-version: "0.2.0"
+version: "0.3.0"
 slug: face_recognizer
 # Ferdigbygd image (se .github/workflows/publish-addons.yml). Taggen er versjonen under.
 image: ghcr.io/da9el-pettersen/facerecognizer-recognition
@@ -24,9 +24,14 @@ options:
     password: ""
     certificate_sha256: ""
     channel: 0
+    stream: "main"
+    rtsp_url: ""
+  stream:
+    fps: 5
+    max_width: 1280
   face:
     provider: "DeepFace"
-    threshold: 0.98
+    threshold: 0.62
   deepface:
     base_url: "http://def5d25e-deepface:5000"
     auth_token: ""
@@ -34,9 +39,12 @@ options:
     threshold: 0.5
   liveness:
     min_score: 0.8
+    required: true
+    min_live_fraction: 0.6
   pipeline:
     cooldown: "00:00:00"
-    liveness_attempts: 4
+    window: "00:00:03"
+    min_frames: 8
   # Intern API (/internal/embed) som Admin-tjenesten bruker. Tomt token = av.
   api:
     token: ""
@@ -53,6 +61,11 @@ schema:
     password: password
     certificate_sha256: str
     channel: int(0,)
+    stream: list(main|sub)
+    rtsp_url: str?
+  stream:
+    fps: int(1,15)
+    max_width: int(320,3840)
   face:
     provider: list(FaceAiSharp|DeepFace)
     threshold: float(0.5,1)
@@ -63,9 +76,12 @@ schema:
     threshold: float(0.1,1)
   liveness:
     min_score: float(0,1)
+    required: bool
+    min_live_fraction: float(0,1)
   pipeline:
     cooldown: str
-    liveness_attempts: int(1,10)
+    window: str
+    min_frames: int(3,30)
   api:
     token: password
     url: str

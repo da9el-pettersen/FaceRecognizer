@@ -9,6 +9,9 @@ RUN dotnet publish src/FaceRecognizer.Recognition -c Release -o /app
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
 WORKDIR /app
+# ffmpeg dekoder RTSP-strømmen til frames
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=build /app .
 # Liveness-modeller (MiniFASNet), låst med sjekksum
 ADD --checksum=sha256:b32929adc2d9c34b9486f8c4c7bc97c1b69bc0ea9befefc380e4faae4e463907 \

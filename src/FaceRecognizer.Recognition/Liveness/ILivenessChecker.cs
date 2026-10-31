@@ -19,6 +19,18 @@ public sealed class LivenessOptions
     /// <summary>Mappe med MiniFASNet ONNX-modellene.</summary>
     public string ModelFolder { get; set; } = "/models";
 
-    /// <summary>Minste gjennomsnittlige "ekte"-score (0-1). Startverdi, må kalibreres mot egne opptak.</summary>
+    /// <summary>Minste "ekte"-score (0-1) per bilde. Startverdi, må kalibreres mot egne opptak. Ikke en sannsynlighet.</summary>
     public float MinScore { get; set; } = 0.8f;
+
+    /// <summary>Om liveness kreves for godkjenning. Når <c>true</c> gir manglende eller mislykket liveness aldri <c>verified</c>.</summary>
+    public bool Required { get; set; } = true;
+
+    /// <summary>Andel av bildene i sekvensen som må være over <see cref="MinScore"/> (i tillegg til at medianen er det).</summary>
+    public float MinLiveFraction { get; set; } = 0.6f;
+
+    /// <summary>Gjennomsnittlig fargespredning (0-255) på eller under dette regnes som svart/hvitt-bilde.</summary>
+    public double MonoMaxChroma { get; set; } = 2.0;
+
+    /// <summary>Gjennomsnittlig fargespredning (0-255) på eller over dette regnes som fargebilde.</summary>
+    public double ColorMinChroma { get; set; } = 8.0;
 }
